@@ -26,7 +26,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO build
       - name: Check Safari extension bundle
         run: |
-          APPEX=$(find ~/Library/Developer/Xcode/DerivedData -path '*Debug-iphoneos/ScreenQR.app/PlugIns/ScreenQRSafari.appex' -maxdepth 6 | head -1)
+          APPEX=$(find ~/Library/Developer/Xcode/DerivedData -path '*Debug-iphoneos/ScreenQR.app/PlugIns/ScreenQRSafari.appex' -maxdepth 8 | head -1)
           ls -R "$APPEX"
           for f in Info.plist manifest.json popup.html popup.js popup.css images/icon-128.png images/toolbar-38.png; do
             test -f "$APPEX/$f" || { echo "missing $f"; exit 1; }
