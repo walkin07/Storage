@@ -3,3 +3,4 @@ ScreenQR/Info.plist
 DerivedData/
 build/
 .DS_Store
+SafariExtension/Info.plist
