@@ -24,6 +24,7 @@ targets:
         CFBundleDisplayName: 화면 QR
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIRequiresFullScreen: true
         UIUserInterfaceStyle: Light
         CFBundleURLTypes:
           - CFBundleURLName: screenqr
@@ -40,7 +41,11 @@ targets:
     sources:
       - SafariExtension/SafariWebExtensionHandler.swift
       - ScreenQR/QRDecoder.swift
+      # 웹 확장 파일은 확장 번들 최상위에 그대로 복사된다 (images/ 폴더는 유지)
       - path: SafariExtension/Resources
+        excludes: ["images/**"]
+        buildPhase: resources
+      - path: SafariExtension/Resources/images
         type: folder
         buildPhase: resources
     info:
