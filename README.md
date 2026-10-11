@@ -26,7 +26,7 @@ GitHub의 **Releases → latest**에 항상 최신 빌드가 올라갑니다 (pu
 
 빌드는 GitHub의 Mac 서버가 대신 해 줍니다. 설치용 서명만 하면 됩니다.
 
-### 방법 A: Windows PC + Sideloadly (무료 Apple ID)
+### 방법 A: Windows PC + Sideloadly (개발자 계정이 없을 때)
 
 1. PC에 [Sideloadly](https://sideloadly.io)를 설치합니다. 안내에 따라 iTunes와 iCloud(Microsoft Store 버전이 아닌 웹 설치 버전)도 설치합니다.
 2. 아이폰을 USB로 연결하고, PC를 "신뢰"합니다.
@@ -36,9 +36,30 @@ GitHub의 **Releases → latest**에 항상 최신 빌드가 올라갑니다 (pu
    - 설정 → 개인정보 보호 및 보안 → **개발자 모드** 켜기 (재시동 필요)
 5. 무료 Apple ID는 **7일마다 다시 설치**해야 합니다. Sideloadly의 자동 갱신(Auto-refresh)을 켜 두면 같은 Wi-Fi에서 PC가 켜져 있을 때 알아서 갱신됩니다.
 
-### 방법 B: 유료 Apple 개발자 계정 (연 $99)
+### 방법 B: Apple 개발자 계정 + TestFlight (PC 필요 없음, 추천)
 
-PC가 전혀 필요 없습니다. 계정이 있으면 GitHub Actions가 빌드 후 **TestFlight**로 바로 올리도록 설정할 수 있고, 아이폰의 TestFlight 앱에서 설치합니다 (90일마다 새 빌드).
+push할 때마다 GitHub Actions가 빌드·서명해서 TestFlight에 올립니다. 아이폰의 **TestFlight** 앱에서 설치·업데이트합니다.
+
+한 번만 준비하면 됩니다:
+
+1. [developer.apple.com → Identifiers](https://developer.apple.com/account/resources/identifiers/list)에서 App ID 두 개 등록
+   - `io.github.walkin07.screenqr` (앱)
+   - `io.github.walkin07.screenqr.safari` (Safari 확장)
+   - 다른 ID를 쓰려면 GitHub 저장소 변수 `APP_BUNDLE_ID`에 앱 ID를 넣으세요.
+2. [App Store Connect → 앱 → +](https://appstoreconnect.apple.com/apps) → 신규 앱: 플랫폼 iOS, 번들 ID는 위의 앱 ID, SKU는 아무거나
+3. App Store Connect → 사용자 및 액세스 → 통합 → App Store Connect API → **팀 키 생성** (액세스: **관리자**)
+   - Issuer ID, 키 ID를 적어 두고 `.p8` 파일을 받습니다 (한 번만 받을 수 있음)
+4. GitHub 저장소 → Settings → Secrets and variables → Actions → **New repository secret** 4개
+   | 이름 | 값 |
+   |---|---|
+   | `APPLE_TEAM_ID` | developer.apple.com → 멤버십 세부 사항의 팀 ID |
+   | `ASC_KEY_ID` | 키 ID |
+   | `ASC_ISSUER_ID` | Issuer ID |
+   | `ASC_KEY_P8` | `.p8` 파일을 메모장으로 열어 `-----BEGIN`부터 `END-----`까지 전부 |
+5. Actions 탭에서 Build 워크플로를 다시 실행하거나 새로 push → 10~30분 뒤 App Store Connect의 TestFlight에 빌드가 나타납니다.
+6. App Store Connect → TestFlight → 내부 테스트 그룹을 만들고 본인을 추가 → 아이폰에서 TestFlight 앱으로 설치
+
+TestFlight 빌드는 90일 동안 쓸 수 있고, 새로 push하면 자동으로 새 빌드가 올라갑니다.
 
 ## 아이폰 설정 (한 번만)
 
