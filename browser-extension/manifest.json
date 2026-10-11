@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "화면 QR",
+  "description": "지금 보고 있는 화면의 QR 코드를 버튼 한 번으로 엽니다. 모든 처리는 브라우저 안에서만 이뤄집니다.",
+  "version": "1.0",
+  "icons": {
+    "48": "images/icon-48.png",
+    "96": "images/icon-96.png",
+    "128": "images/icon-128.png"
+  },
+  "action": {
+    "default_title": "화면 QR (Alt+Shift+Q)",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images/toolbar-16.png",
+      "32": "images/toolbar-32.png",
+      "48": "images/toolbar-48.png"
+    }
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+Q"
+      },
+      "description": "화면의 QR 열기"
+    }
+  },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "screen-qr@walkin07.github.io",
+      "strict_min_version": "128.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "128.0"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

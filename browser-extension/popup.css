@@ -1,0 +1,72 @@
+:root {
+  color-scheme: light;
+  --ink: #111;
+  --muted: #8a8a8e;
+  --line: rgba(0, 0, 0, 0.08);
+}
+
+body {
+  margin: 0;
+  min-width: 280px;
+  background: #fff;
+  color: var(--ink);
+  font: 16px/1.4 -apple-system, system-ui, sans-serif;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 16px;
+}
+
+#status {
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+}
+
+ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+li {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  word-break: break-all;
+}
+
+li .text {
+  margin: 0 0 10px;
+  font-family: ui-monospace, monospace;
+  font-size: 14px;
+}
+
+button {
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+}
+
+button.link {
+  padding: 0;
+  background: none;
+  color: var(--ink);
+  font-weight: 500;
+  text-align: left;
+}

@@ -1,4 +1,4 @@
-name: iOS Build
+name: Build
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  ios:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -22,12 +22,60 @@ jobs:
       - name: Build (unsigned)
         run: |
           xcodebuild -project ScreenQR.xcodeproj -scheme ScreenQR \
-            -destination 'generic/platform=iOS' -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO build
+            -destination 'generic/platform=iOS' -configuration Release \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
       - name: Check Safari extension bundle
         run: |
-          APPEX=$(find ~/Library/Developer/Xcode/DerivedData -path '*Debug-iphoneos/ScreenQR.app/PlugIns/ScreenQRSafari.appex' -maxdepth 8 | head -1)
+          APPEX=build/Build/Products/Release-iphoneos/ScreenQR.app/PlugIns/ScreenQRSafari.appex
           ls -R "$APPEX"
           for f in Info.plist manifest.json popup.html popup.js popup.css images/icon-128.png images/toolbar-38.png; do
             test -f "$APPEX/$f" || { echo "missing $f"; exit 1; }
           done
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p dist/Payload
+          cp -R build/Build/Products/Release-iphoneos/ScreenQR.app dist/Payload/
+          (cd dist && zip -qry ScreenQR-unsigned.ipa Payload)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ScreenQR-unsigned-ipa
+          path: dist/ScreenQR-unsigned.ipa
+
+  browser-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Lint (Firefox rules)
+        run: npx -y web-ext@8 lint --source-dir browser-extension --self-hosted
+      - name: Package
+        run: |
+          mkdir -p dist
+          (cd browser-extension && zip -qr ../dist/ScreenQR-browser-extension.zip .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ScreenQR-browser-extension
+          path: dist/ScreenQR-browser-extension.zip
+
+  release:
+    if: github.event_name != 'pull_request'
+    needs: [ios, browser-extension]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest dist/* --target "$GITHUB_SHA" --prerelease \
+            --title "화면 QR (최신 빌드)" \
+            --notes "ScreenQR-unsigned.ipa: Sideloadly 등으로 아이폰에 설치 · ScreenQR-browser-extension.zip: Chrome/Edge/Whale/Brave/Firefox 확장"
