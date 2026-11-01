@@ -17,7 +17,7 @@
 
 ## 다운로드
 
-GitHub의 **Releases → latest**에 항상 최신 빌드가 올라갑니다 (push할 때마다 자동 빌드).
+GitHub의 **Releases → screenqr-latest**에 항상 최신 빌드가 올라갑니다 (push할 때마다 자동 빌드).
 
 - `ScreenQR-unsigned.ipa`: 아이폰 앱
 - `ScreenQR-browser-extension.zip`: 브라우저 확장

@@ -77,13 +77,14 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Publish "latest" release
+      # 태그 이름 "latest"로는 이제 릴리스를 만들 수 없어서(HTTP 403) screenqr-latest를 쓴다.
+      - name: Publish "screenqr-latest" release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest dist/* --target "$GITHUB_SHA" --prerelease \
+          gh release delete screenqr-latest --yes --cleanup-tag || true
+          gh release create screenqr-latest dist/* --target "$GITHUB_SHA" --prerelease \
             --title "화면 QR (최신 빌드)" \
             --notes "ScreenQR-unsigned.ipa: Sideloadly 등으로 아이폰에 설치 · ScreenQR-browser-extension.zip: Chrome/Edge/Whale/Brave/Firefox 확장"
 
