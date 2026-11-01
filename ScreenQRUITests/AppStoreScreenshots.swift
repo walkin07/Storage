@@ -22,7 +22,7 @@ final class AppStoreScreenshots: XCTestCase {
             app.staticTexts["‘이미지 속 QR 열기’ 넣기"].waitForExistence(timeout: 20)
         }
         // 4. 기본 화면(사진에서 QR 열기) + 글 QR을 열었을 때의 내용 시트
-        shoot("34-photo", ["UITEST", "-tutorial.done", "YES", "-uitest.inboxText", "카페 와이파이 비밀번호\ncoffee1234"]) { app in
+        shoot("34-photo", ["UITEST", "-tutorial.done", "YES", "-uitest.inboxText", "카페 와이파이 비밀번호: coffee1234"]) { app in
             app.staticTexts["QR 내용"].waitForExistence(timeout: 20)
         }
         // 5. QR 만들기

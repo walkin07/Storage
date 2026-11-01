@@ -8,12 +8,14 @@ on:
       - "GameDeck/**"
       - ".github/workflows/gamedeck.yml"
       - "AppStore/**"
+      - "ScreenQRUITests/AppStoreScreenshots.swift"
       - ".github/workflows/appstore.yml"
   pull_request:
     paths-ignore:
       - "GameDeck/**"
       - ".github/workflows/gamedeck.yml"
       - "AppStore/**"
+      - "ScreenQRUITests/AppStoreScreenshots.swift"
       - ".github/workflows/appstore.yml"
   workflow_dispatch:
 
