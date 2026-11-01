@@ -114,8 +114,7 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
         case .qr:
             [
                 Text("다시 ‘QR’을 입력하고 ‘이미지\u{00A0}속\u{00A0}QR\u{00A0}열기’\u{2060}를 눌러요"),
-                Text("‘스크린샷에서\u{00A0}QR\u{00A0}열기’\u{2060}로 이어졌는지 확인해요"),
-                Text("따로 저장할 필요 없어요. 왼쪽 위 ‘\(Image(systemName: "arrowtriangle.left.fill"))\u{00A0}Screen\u{00A0}QR\u{00A0}Scanner’\u{2060}로 돌아오면 끝!"),
+                Text("‘스크린샷에서\u{00A0}QR\u{00A0}열기’\u{2060}가 추가되면 끝!"),
             ]
         case .safari:
             [
@@ -406,6 +405,16 @@ struct TutorialView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
             .scrollIndicators(.hidden)
+            // 위쪽 막대·아래 버튼과의 경계에서 내용(그림자 포함)이 뚝 잘리지 않고 자연스럽게 사라지게
+            .mask {
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 14)
+                    Color.black
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 14)
+                }
+            }
         }
     }
 
@@ -556,8 +565,7 @@ private struct StepPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: compact ? 18 : 24) {
-            // 1단계와 3단계는 왼쪽 위 ‘◀ Screen QR Scanner’로 돌아오는 것까지 보여 준다.
-            ShortcutMock(scene: scene, showsBackLink: page == .open || page == .qr, still: still, contentHidden: restarting)
+            ShortcutMock(scene: scene, showsBackLink: page == .open, still: still, contentHidden: restarting)
                 .frame(height: compact ? 236 : 290)
                 .overlay {
                     if showHint {
@@ -721,7 +729,7 @@ private struct StepPage: View {
         }
     }
 
-    /// ‘QR’ 입력 → ‘이미지 속 QR 열기’ 추가(스크린샷이 이어짐) → 왼쪽 위로 돌아오기 (→ 다녀온 뒤에는 안내)
+    /// ‘QR’ 입력 → ‘이미지 속 QR 열기’ 추가(스크린샷이 이어짐)되면 끝 (→ 다녀온 뒤에는 안내)
     private func playQR() async {
         while !Task.isCancelled {
             withAnimation(.smooth(duration: 0.3)) { activeLine = 0 }
@@ -746,12 +754,8 @@ private struct StepPage: View {
                 scene.blocks = 2
                 activeLine = 1
             }
-            guard await tutorialPause(1600) else { return }
-            // 저장은 자동이라 왼쪽 위로 바로 돌아오면 끝
-            withAnimation(.smooth(duration: 0.3)) { activeLine = 2 }
-            guard await tutorialPause(600) else { return }
-            scene.tapBack += 1
-            guard await tutorialPause(1500) else { return }
+            // ‘스크린샷에서 QR 열기’가 들어간 모습을 충분히 보여 준 뒤 다시 시작 (단축어는 자동으로 저장된다)
+            guard await tutorialPause(2400) else { return }
             guard await finishLoop() else { return }
         }
     }
