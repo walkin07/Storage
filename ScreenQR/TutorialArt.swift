@@ -812,8 +812,9 @@ struct PhoneScreen: ViewModifier {
                 RoundedRectangle(cornerRadius: 34, style: .continuous)
                     .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
             }
-            // 위로 번지면 위쪽 막대와의 경계에서 잘려 회색 띠처럼 보여서, 아래쪽으로만 옅게 깐다.
-            .shadow(color: .black.opacity(0.06), radius: 12, y: 10)
+            // 사방으로 고르게 (빛이 위에서 오는 것처럼 아래만 살짝 더).
+            // 위로 번진 그림자는 스크롤 영역 위쪽의 페이드 안에서 자연스럽게 사라져, 위쪽 막대 경계에서 잘리지 않는다.
+            .shadow(color: .black.opacity(0.07), radius: 16, y: 4)
             .environment(\.dynamicTypeSize, .large)
             .accessibilityHidden(true)
     }
