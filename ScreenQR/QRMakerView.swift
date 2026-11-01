@@ -54,6 +54,8 @@ struct QRMakerView: View {
     @State private var input = ""
     @State private var message: String?
     @State private var doneTick = 0
+    @State private var tapTick = 0
+    @State private var errorTick = 0
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -74,6 +76,10 @@ struct QRMakerView: View {
             }
         }
         .sensoryFeedback(.success, trigger: doneTick)
+        .sensoryFeedback(.impact(weight: .light), trigger: tapTick)
+        .sensoryFeedback(.error, trigger: errorTick)
+        // QR 코드가 처음 만들어지는 순간 톡
+        .sensoryFeedback(.impact(weight: .medium), trigger: image != nil) { old, new in !old && new }
         .onChange(of: input) { _, _ in message = nil }
     }
 
@@ -92,7 +98,10 @@ struct QRMakerView: View {
                 .background(Color.black.opacity(0.04), in: .rect(cornerRadius: 14))
             HStack(spacing: 10) {
                 PasteButton(payloadType: String.self) { strings in
-                    if let first = strings.first { input = first }
+                    if let first = strings.first {
+                        input = first
+                        tapTick += 1
+                    }
                 }
                 .buttonBorderShape(.capsule)
                 .labelStyle(.titleAndIcon)
@@ -100,6 +109,7 @@ struct QRMakerView: View {
                 if !input.isEmpty {
                     Button {
                         input = ""
+                        tapTick += 1
                     } label: {
                         Label("지우기", systemImage: "xmark.circle.fill")
                     }
@@ -148,6 +158,7 @@ struct QRMakerView: View {
                 }
                 .buttonStyle(.glassProminent)
                 .tint(.black)
+                .simultaneousGesture(TapGesture().onEnded { tapTick += 1 })
                 Button {
                     Task { await save(image) }
                 } label: {
@@ -181,6 +192,7 @@ struct QRMakerView: View {
         let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard status == .authorized || status == .limited else {
             message = "사진 저장을 허용해야 저장할 수 있어요. 설정 → 앱에서 바꿀 수 있어요."
+            errorTick += 1
             return
         }
         do {
@@ -191,6 +203,7 @@ struct QRMakerView: View {
             doneTick += 1
         } catch {
             message = "저장하지 못했어요: \(error.localizedDescription)"
+            errorTick += 1
         }
     }
 }

@@ -79,6 +79,7 @@ struct ContentView: View {
                 modePicker
                 switch mode {
                 case .scan:
+                    PhotoScanCard(onOpen: openPayload)
                     shortcutCard
                     triggerCard
                     Text("스크린샷은 저장되지 않고, QR은 기기 안에서만 읽어요.")
@@ -107,6 +108,16 @@ struct ContentView: View {
         }
         .sheet(item: $scanned) { item in
             ScannedTextView(text: item.text)
+        }
+    }
+
+    /// 찾은 QR 내용을 연다: 링크는 바로 열고, 글이나 Wi-Fi 정보는 내용을 보여 준다.
+    private func openPayload(_ payload: String) {
+        let url = QRPayload.destination(for: payload)
+        if let text = QRPayload.text(from: url) {
+            scanned = ScannedText(text: text)
+        } else {
+            openURL(url)
         }
     }
 
@@ -157,6 +168,9 @@ struct ContentView: View {
                 ActionRow(symbol: "qrcode", text: "이미지 속 QR 열기")
             }
             Text("이 순서로 넣고 이름을 ‘QR 열기’로 저장하세요. 두 번째 줄이 ‘스크린샷에서 QR 열기’로 이어져 있어야 버튼 한 번에 열려요.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text("버튼을 누를 때 진동도 느끼고 싶으면 맨 위에 ‘진동’ 동작을 하나 더 넣으세요 (검색창에 ‘진동’).")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Button {
@@ -269,6 +283,7 @@ struct ScannedTextView: View {
     let text: String
     @Environment(\.dismiss) private var dismiss
     @State private var copied = false
+    @State private var closeTick = 0
 
     var body: some View {
         VStack(spacing: 20) {
@@ -283,8 +298,11 @@ struct ScannedTextView: View {
             }
             .glassEffect(.regular, in: .rect(cornerRadius: 24))
             HStack(spacing: 12) {
-                Button("닫기") { dismiss() }
-                    .buttonStyle(.glass)
+                Button("닫기") {
+                    closeTick += 1
+                    dismiss()
+                }
+                .buttonStyle(.glass)
                 Button(copied ? "복사됨" : "복사") {
                     UIPasteboard.general.string = text
                     copied = true
@@ -298,5 +316,6 @@ struct ScannedTextView: View {
         .background(Color.white.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .sensoryFeedback(.success, trigger: copied)
+        .sensoryFeedback(.impact(weight: .light), trigger: closeTick)
     }
 }
