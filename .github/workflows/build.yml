@@ -28,9 +28,14 @@ jobs:
         run: xcodegen generate
       - name: Build (unsigned)
         run: |
+          set -o pipefail
           xcodebuild -project ScreenQR.xcodeproj -scheme ScreenQR \
             -destination 'generic/platform=iOS' -configuration Release \
-            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log
+      - name: Show compile errors
+        if: failure()
+        run: |
+          grep -E "error:" build.log | sort -u | head -100 || true
       - name: Check Safari extension bundle
         run: |
           APPEX=build/Build/Products/Release-iphoneos/ScreenQR.app/PlugIns/ScreenQRSafari.appex
@@ -47,6 +52,94 @@ jobs:
         with:
           name: ScreenQR-unsigned-ipa
           path: dist/ScreenQR-unsigned.ipa
+
+  # 시뮬레이터에서 첫 실행 튜토리얼을 끝까지 넘겨 본다. 스크린샷은 아티팩트로 올리고, 로그에도 작게 남긴다.
+  ui-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Pick an iPhone simulator
+        run: |
+          cat > "$RUNNER_TEMP/pick.py" <<'PY'
+          import json, sys
+          best = None
+          for runtime, items in json.load(sys.stdin)["devices"].items():
+              if "iOS-26" not in runtime and "iOS-27" not in runtime:
+                  continue
+              for device in items:
+                  name = device["name"]
+                  if not name.startswith("iPhone"):
+                      continue
+                  score = ("Pro" in name and "Max" not in name, runtime, name)
+                  if best is None or score > best[0]:
+                      best = (score, device["udid"], name, runtime)
+          print(f"{best[1]} {best[2]} {best[3]}" if best else "")
+          PY
+          PICK=$(xcrun simctl list devices available -j | python3 "$RUNNER_TEMP/pick.py")
+          echo "simulator: $PICK"
+          test -n "$PICK"
+          echo "UDID=${PICK%% *}" >> "$GITHUB_ENV"
+      - name: UI test
+        run: |
+          set -o pipefail
+          xcodebuild test -project ScreenQR.xcodeproj -scheme ScreenQR \
+            -destination "id=$UDID" -resultBundlePath UITests.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
+          grep -q "\*\* TEST SUCCEEDED \*\*" test.log
+      - name: Show test errors
+        if: failure()
+        run: |
+          grep -E "error:|failed|XCTAssert" test.log | sort -u | head -80 || true
+      - name: Export screenshots
+        if: always()
+        run: |
+          mkdir -p shots
+          xcrun xcresulttool export attachments --path UITests.xcresult --output-path shots-raw || true
+          cat > "$RUNNER_TEMP/rename.py" <<'PY'
+          import json, os, re, shutil, sys
+          raw, out = sys.argv[1], sys.argv[2]
+          manifest = os.path.join(raw, "manifest.json")
+          if os.path.exists(manifest):
+              for test in json.load(open(manifest)):
+                  for item in test.get("attachments", []):
+                      exported = item.get("exportedFileName")
+                      if not exported or not exported.lower().endswith(".png"):
+                          continue
+                      label = item.get("suggestedHumanReadableName") or exported
+                      label = re.match(r"[0-9]+-[a-z-]+", label)
+                      name = (label.group(0) if label else os.path.splitext(exported)[0]) + ".png"
+                      shutil.copy(os.path.join(raw, exported), os.path.join(out, name))
+          PY
+          python3 "$RUNNER_TEMP/rename.py" shots-raw shots || true
+          for f in shots/*.png; do
+            [ -e "$f" ] || continue
+            sips -s format jpeg -s formatOptions 50 --resampleWidth 420 "$f" --out "${f%.png}.jpg" >/dev/null
+          done
+          ls -la shots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ScreenQR-screenshots
+          path: shots/*.png
+          if-no-files-found: warn
+      - name: Print screenshots (base64, for review)
+        if: always()
+        run: |
+          for f in shots/*.jpg; do
+            [ -e "$f" ] || continue
+            echo "=====BEGIN $(basename "$f")====="
+            base64 -b 76 -i "$f"
+            echo "=====END $(basename "$f")====="
+          done
 
   browser-extension:
     runs-on: ubuntu-latest
@@ -93,9 +186,10 @@ jobs:
             gh release create screenqr-latest dist/* --target "$GITHUB_SHA" --prerelease --title "$TITLE" --notes "$NOTES"
           fi
 
+  # 시뮬레이터 UI 테스트(튜토리얼)까지 통과한 빌드만 TestFlight에 올린다.
   testflight:
     if: github.event_name != 'pull_request'
-    needs: ios
+    needs: [ios, ui-test]
     runs-on: macos-15
     env:
       TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

@@ -6,45 +6,7 @@ struct ScannedText: Identifiable {
     let text: String
 }
 
-/// 단축어를 실행할 방법
-enum Trigger: String, CaseIterable, Identifiable {
-    case backTap, actionButton, controlCenter, safari
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .backTap: "뒷면 탭"
-        case .actionButton: "동작 버튼"
-        case .controlCenter: "제어 센터"
-        case .safari: "Safari"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .backTap: "hand.tap"
-        case .actionButton: "button.horizontal.top.press"
-        case .controlCenter: "switch.2"
-        case .safari: "safari"
-        }
-    }
-
-    var steps: [String] {
-        switch self {
-        case .backTap:
-            ["설정 → 손쉬운 사용 → 터치 → 뒷면 탭", "이중 탭 → 단축어 ‘QR 열기’ 선택", "이제 뒷면을 두 번 톡톡"]
-        case .actionButton:
-            ["설정 → 동작 버튼 → 단축어", "내 단축어에서 ‘QR 열기’ 선택 (앱의 ‘이미지 속 QR 열기’를 고르면 사진 선택이 떠요)", "iPhone 15 Pro 이상에서 쓸 수 있어요"]
-        case .controlCenter:
-            ["제어 센터를 열고 빈 곳을 길게 누르기", "컨트롤 추가 → 단축어 → ‘QR 열기’ 선택", "제어 센터에서 한 번 누르기"]
-        case .safari:
-            ["설정 → 앱 → Safari → 확장 프로그램", "Screen QR Scanner 켜기", "주소창의 메뉴 → Screen QR Scanner (단축어 없이 동작)"]
-        }
-    }
-}
-
-/// 위쪽 전환: 화면 속 QR 읽기 설정 / 링크로 QR 만들기
+/// 위쪽 전환: 화면 속 QR 읽기 / 링크로 QR 만들기
 enum AppMode: String, CaseIterable, Identifiable {
     case scan, make
 
@@ -67,25 +29,65 @@ enum AppMode: String, CaseIterable, Identifiable {
 
 struct ContentView: View {
     @Environment(\.openURL) private var openURL
+    @AppStorage(TutorialKeys.done) private var tutorialDone = false
+    @AppStorage(TutorialKeys.page) private var tutorialPage = 0
+    /// 처음 설치했으면 튜토리얼부터 보여 준다 (첫 화면부터 바로 보이도록 시작 값으로 정한다).
+    @State private var showTutorial = !UserDefaults.standard.bool(forKey: TutorialKeys.done)
+    /// 앱이 켜지면서 열린 튜토리얼만 보던 페이지부터 이어 본다. 버튼으로 열면 처음부터.
+    @State private var tutorialResume = true
+    @State private var tutorialTestPassed = false
     @State private var mode: AppMode = .scan
-    @State private var trigger: Trigger = .backTap
     @State private var scanned: ScannedText?
-    @State private var tapCount = 0
 
     var body: some View {
+        ZStack {
+            home
+                .scaleEffect(showTutorial ? 0.94 : 1)
+                .opacity(showTutorial ? 0 : 1)
+                .allowsHitTesting(!showTutorial)
+                .accessibilityHidden(showTutorial)
+            if showTutorial {
+                TutorialView(resume: tutorialResume, testPassed: tutorialTestPassed, onClose: closeTutorial)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom),
+                        removal: .opacity.combined(with: .scale(scale: 1.04))
+                    ))
+                    .zIndex(1)
+            }
+        }
+        .background(Color.white.ignoresSafeArea())
+        .preferredColorScheme(.light)
+        .sensoryFeedback(.selection, trigger: mode)
+        .sensoryFeedback(.success, trigger: scanned?.id)
+        // 튜토리얼을 열 때는 가볍게, 닫고 기본 화면으로 갈 때는 조금 더 묵직하게
+        .sensoryFeedback(trigger: showTutorial) { _, shown -> SensoryFeedback? in
+            shown ? SensoryFeedback.impact(weight: .light) : SensoryFeedback.impact(weight: .medium)
+        }
+        .onOpenURL { url in
+            guard let text = QRPayload.text(from: url) else { return }
+            if showTutorial && text == TutorialView.testPayload {
+                // 튜토리얼 마지막 페이지의 시험용 QR을 단축어로 읽었다.
+                tutorialTestPassed = true
+            } else {
+                scanned = ScannedText(text: text)
+            }
+        }
+        .sheet(item: $scanned) { item in
+            ScannedTextView(text: item.text)
+        }
+    }
+
+    private var home: some View {
         ScrollView {
             VStack(spacing: 32) {
                 header
                 modePicker
                 switch mode {
                 case .scan:
-                    PhotoScanCard(onOpen: openPayload)
-                    shortcutCard
-                    triggerCard
-                    Text("스크린샷은 저장되지 않고, QR은 기기 안에서만 읽어요.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                    VStack(spacing: 16) {
+                        PhotoScanCard(onOpen: openPayload)
+                        tutorialButton
+                    }
                 case .make:
                     QRMakerView()
                 }
@@ -96,19 +98,18 @@ struct ContentView: View {
         .scrollBounceBehavior(.basedOnSize)
         .scrollDismissesKeyboard(.interactively)
         .background(Color.white.ignoresSafeArea())
-        .preferredColorScheme(.light)
-        .sensoryFeedback(.selection, trigger: trigger)
-        .sensoryFeedback(.selection, trigger: mode)
-        .sensoryFeedback(.impact(weight: .light), trigger: tapCount)
-        .sensoryFeedback(.success, trigger: scanned?.id)
-        .onOpenURL { url in
-            if let text = QRPayload.text(from: url) {
-                scanned = ScannedText(text: text)
-            }
-        }
-        .sheet(item: $scanned) { item in
-            ScannedTextView(text: item.text)
-        }
+    }
+
+    private func openTutorial() {
+        tutorialResume = false
+        tutorialTestPassed = false
+        withAnimation(.spring(duration: 0.55, bounce: 0.1)) { showTutorial = true }
+    }
+
+    private func closeTutorial() {
+        tutorialDone = true
+        tutorialPage = 0
+        withAnimation(.smooth(duration: 0.5)) { showTutorial = false }
     }
 
     /// 찾은 QR 내용을 연다: 링크는 바로 열고, 글이나 Wi-Fi 정보는 내용을 보여 준다.
@@ -127,15 +128,10 @@ struct ContentView: View {
                 .font(.system(size: 40, weight: .medium))
                 .frame(width: 88, height: 88)
                 .glassEffect(.regular.interactive(), in: .circle)
-            VStack(spacing: 6) {
-                Text("Screen QR Scanner")
-                    .font(.largeTitle.bold())
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Text("화면 속 QR을 버튼 한 번으로 열고, 링크로 QR을 만들어요")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
+            Text("Screen QR Scanner")
+                .font(.largeTitle.bold())
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
     }
 
@@ -161,141 +157,26 @@ struct ContentView: View {
         }
     }
 
-    private var shortcutCard: some View {
-        Card(number: 1, title: "단축어 만들기 (처음 한 번)") {
-            Text("앱은 다른 앱 화면을 캡처할 수 없어서, 캡처는 단축어의 기본 동작 ‘스크린샷 찍기’가 해요. 아래 두 줄짜리 단축어를 한 번만 만들면 버튼 한 번에 캡처하고 QR을 열어요.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 10) {
-                ActionRow(symbol: "camera.viewfinder", text: "스크린샷 찍기  (단축어 기본 동작)")
-                ActionRow(symbol: "qrcode", text: "이미지 속 QR 열기  (이 앱)")
+    /// 튜토리얼을 다시 보는 버튼
+    private var tutorialButton: some View {
+        Button(action: openTutorial) {
+            HStack(spacing: 14) {
+                ShortcutsGlyph(size: 44)
+                Text("단축어 만들기 튜토리얼")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
-            VStack(alignment: .leading, spacing: 8) {
-                StepLine(number: 1, text: "아래 버튼으로 단축어 앱을 열면 새 단축어가 만들어져요")
-                StepLine(number: 2, text: "아래쪽 ‘동작 검색’에 ‘스크린샷’ 입력 → ‘스크린샷 찍기’")
-                StepLine(number: 3, text: "다시 ‘QR’ 입력 → ‘이미지 속 QR 열기’ (자동으로 ‘스크린샷에서 QR 열기’가 돼요)")
-                StepLine(number: 4, text: "위쪽 이름을 ‘QR 열기’로 바꾸고 완료")
-            }
-            Text("버튼을 누를 때 진동도 원하면 맨 위에 ‘진동’ 동작을 하나 더 넣으세요.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            Button {
-                tapCount += 1
-                if let url = URL(string: "shortcuts://create-shortcut") { openURL(url) }
-            } label: {
-                Text("단축어 앱 열기")
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.glassProminent)
-            .tint(.black)
-            .controlSize(.large)
-        }
-    }
-
-    private var triggerCard: some View {
-        Card(number: 2, title: "실행 방법 고르기") {
-            GlassEffectContainer(spacing: 8) {
-                HStack(spacing: 8) {
-                    ForEach(Trigger.allCases) { item in
-                        TriggerChip(trigger: item, isSelected: item == trigger) {
-                            withAnimation(.snappy) { trigger = item }
-                        }
-                    }
-                }
-            }
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(Array(trigger.steps.enumerated()), id: \.offset) { index, step in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text("\(index + 1)")
-                            .font(.footnote.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                        Text(step)
-                    }
-                }
-            }
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .id(trigger)
-            .transition(.opacity)
-        }
-    }
-}
-
-private struct Card<Content: View>: View {
-    let number: Int
-    let title: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 10) {
-                Text("\(number)")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 26, height: 26)
-                    .background(.black, in: .circle)
-                Text(title)
-                    .font(.title3.weight(.semibold))
-            }
-            content
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 28))
-    }
-}
-
-private struct StepLine: View {
-    let number: Int
-    let text: String
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text("\(number)")
-                .font(.footnote.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.secondary)
-            Text(text)
-                .font(.subheadline)
-        }
-    }
-}
-
-private struct ActionRow: View {
-    let symbol: String
-    let text: String
-
-    var body: some View {
-        Label(text, systemImage: symbol)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.black.opacity(0.04), in: .rect(cornerRadius: 14))
-    }
-}
-
-private struct TriggerChip: View {
-    let trigger: Trigger
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: trigger.symbol)
-                    .font(.system(size: 18, weight: .medium))
-                Text(trigger.title)
-                    .font(.caption.weight(.medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
-            .frame(maxWidth: .infinity, minHeight: 60)
+            .contentShape(.rect(cornerRadius: 24))
         }
         .buttonStyle(.plain)
-        .glassEffect(
-            isSelected ? .regular.tint(.black).interactive() : .regular.interactive(),
-            in: .rect(cornerRadius: 18)
-        )
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24))
+        .accessibilityIdentifier("home.tutorial")
     }
 }
 
