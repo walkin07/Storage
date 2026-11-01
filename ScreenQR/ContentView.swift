@@ -33,11 +33,11 @@ enum Trigger: String, CaseIterable, Identifiable {
     var steps: [String] {
         switch self {
         case .backTap:
-            ["설정 → 손쉬운 사용 → 터치 → 뒷면 탭", "이중 탭 → 화면 QR 선택", "이제 뒷면을 두 번 톡톡"]
+            ["설정 → 손쉬운 사용 → 터치 → 뒷면 탭", "이중 탭 → 단축어 ‘QR 열기’ 선택", "이제 뒷면을 두 번 톡톡"]
         case .actionButton:
-            ["설정 → 동작 버튼", "단축어 → 화면 QR 선택", "iPhone 15 Pro 이상에서 쓸 수 있어요"]
+            ["설정 → 동작 버튼 → 단축어", "내 단축어에서 ‘QR 열기’ 선택 (앱의 ‘이미지 속 QR 열기’를 고르면 사진 선택이 떠요)", "iPhone 15 Pro 이상에서 쓸 수 있어요"]
         case .controlCenter:
-            ["제어 센터를 열고 빈 곳을 길게 누르기", "컨트롤 추가 → 단축어 → 화면 QR 선택", "제어 센터에서 한 번 누르기"]
+            ["제어 센터를 열고 빈 곳을 길게 누르기", "컨트롤 추가 → 단축어 → ‘QR 열기’ 선택", "제어 센터에서 한 번 누르기"]
         case .safari:
             ["설정 → 앱 → Safari → 확장 프로그램", "화면 QR 켜기", "주소창의 메뉴 → 화면 QR (단축어 없이 동작)"]
         }
@@ -101,6 +101,9 @@ struct ContentView: View {
                 ActionRow(symbol: "camera.viewfinder", text: "스크린샷 찍기")
                 ActionRow(symbol: "qrcode", text: "이미지 속 QR 열기")
             }
+            Text("이 순서로 넣고 이름을 ‘QR 열기’로 저장하세요. 두 번째 줄이 ‘스크린샷에서 QR 열기’로 이어져 있어야 버튼 한 번에 열려요.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             Button {
                 tapCount += 1
                 if let url = URL(string: "shortcuts://create-shortcut") { openURL(url) }
