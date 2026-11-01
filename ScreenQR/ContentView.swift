@@ -162,15 +162,21 @@ struct ContentView: View {
     }
 
     private var shortcutCard: some View {
-        Card(number: 1, title: "단축어 만들기") {
-            VStack(alignment: .leading, spacing: 10) {
-                ActionRow(symbol: "camera.viewfinder", text: "스크린샷 찍기")
-                ActionRow(symbol: "qrcode", text: "이미지 속 QR 열기")
-            }
-            Text("이 순서로 넣고 이름을 ‘QR 열기’로 저장하세요. 두 번째 줄이 ‘스크린샷에서 QR 열기’로 이어져 있어야 버튼 한 번에 열려요.")
+        Card(number: 1, title: "단축어 만들기 (처음 한 번)") {
+            Text("앱은 다른 앱 화면을 캡처할 수 없어서, 캡처는 단축어의 기본 동작 ‘스크린샷 찍기’가 해요. 아래 두 줄짜리 단축어를 한 번만 만들면 버튼 한 번에 캡처하고 QR을 열어요.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            Text("버튼을 누를 때 진동도 느끼고 싶으면 맨 위에 ‘진동’ 동작을 하나 더 넣으세요 (검색창에 ‘진동’).")
+            VStack(alignment: .leading, spacing: 10) {
+                ActionRow(symbol: "camera.viewfinder", text: "스크린샷 찍기  (단축어 기본 동작)")
+                ActionRow(symbol: "qrcode", text: "이미지 속 QR 열기  (이 앱)")
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                StepLine(number: 1, text: "아래 버튼으로 단축어 앱을 열면 새 단축어가 만들어져요")
+                StepLine(number: 2, text: "아래쪽 ‘동작 검색’에 ‘스크린샷’ 입력 → ‘스크린샷 찍기’")
+                StepLine(number: 3, text: "다시 ‘QR’ 입력 → ‘이미지 속 QR 열기’ (자동으로 ‘스크린샷에서 QR 열기’가 돼요)")
+                StepLine(number: 4, text: "위쪽 이름을 ‘QR 열기’로 바꾸고 완료")
+            }
+            Text("버튼을 누를 때 진동도 원하면 맨 위에 ‘진동’ 동작을 하나 더 넣으세요.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Button {
@@ -236,6 +242,21 @@ private struct Card<Content: View>: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassEffect(.regular, in: .rect(cornerRadius: 28))
+    }
+}
+
+private struct StepLine: View {
+    let number: Int
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text("\(number)")
+                .font(.footnote.weight(.semibold).monospacedDigit())
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.subheadline)
+        }
     }
 }
 
