@@ -87,7 +87,12 @@ struct HomeView: View {
                     if pad.controllerName != nil {
                         ButtonHintBar()
                             .padding(.horizontal, landscape ? 28 : 18)
+                            .padding(.top, 6)
                             .padding(.bottom, 6)
+                            .background {
+                                LinearGradient(colors: [.black.opacity(0), .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
+                                    .ignoresSafeArea(edges: .bottom)
+                            }
                     }
                 }
             }

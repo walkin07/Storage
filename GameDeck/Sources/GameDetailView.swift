@@ -8,6 +8,7 @@ struct GameDetailView: View {
 
     @EnvironmentObject private var library: LibraryStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var editing = false
     @State private var confirmDelete = false
     @State private var copied = false
@@ -41,44 +42,23 @@ struct GameDetailView: View {
 
     private func details(_ game: Game) -> some View {
         ScrollView {
-            VStack(spacing: 22) {
-                CoverView(game: game, maxPixel: 900)
-                    .aspectRatio(2.0 / 3.0, contentMode: .fit)
-                    .frame(maxWidth: 210)
-                    .clipShape(.rect(cornerRadius: 20))
-                    .shadow(color: game.platform.tint.opacity(0.45), radius: 24, y: 8)
-                VStack(spacing: 8) {
-                    HStack(spacing: 8) {
-                        PlatformBadge(platform: game.platform)
-                        if let runner = game.runner {
-                            Text(runner.info.name)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Text(game.title)
-                        .font(.title.bold())
-                        .multilineTextAlignment(.center)
-                    Text(game.playedSummary)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+            if verticalSizeClass == .compact {
+                // 아이폰 가로: 표지는 왼쪽, 정보와 버튼은 오른쪽
+                HStack(alignment: .top, spacing: 28) {
+                    cover(game, width: 160)
+                    info(game)
                 }
-                Button {
-                    onPlay(game)
-                } label: {
-                    Label("플레이", systemImage: "play.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+            } else {
+                VStack(spacing: 22) {
+                    cover(game, width: 210)
+                    info(game)
                 }
-                .buttonStyle(.glassProminent)
-                .tint(game.platform.tint)
-                .controlSize(.large)
-                launchCard(game)
-                actions(game)
+                .padding(20)
+                .frame(maxWidth: 560)
+                .frame(maxWidth: .infinity)
             }
-            .padding(20)
-            .frame(maxWidth: 560)
-            .frame(maxWidth: .infinity)
         }
         .confirmationDialog("‘\(game.title)’을(를) 목록에서 지울까요?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("삭제", role: .destructive) {
@@ -87,6 +67,47 @@ struct GameDetailView: View {
             }
         } message: {
             Text("게임 앱과 파일은 그대로예요. 게임덱 목록에서만 빠져요.")
+        }
+    }
+
+    private func cover(_ game: Game, width: CGFloat) -> some View {
+        CoverView(game: game, maxPixel: 900)
+            .aspectRatio(2.0 / 3.0, contentMode: .fit)
+            .frame(width: width)
+            .clipShape(.rect(cornerRadius: 20))
+            .shadow(color: game.platform.tint.opacity(0.45), radius: 24, y: 8)
+    }
+
+    private func info(_ game: Game) -> some View {
+        VStack(spacing: 22) {
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    PlatformBadge(platform: game.platform)
+                    if let runner = game.runner {
+                        Text(runner.info.name)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text(game.title)
+                    .font(.title.bold())
+                    .multilineTextAlignment(.center)
+                Text(game.playedSummary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Button {
+                onPlay(game)
+            } label: {
+                Label("플레이", systemImage: "play.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glassProminent)
+            .tint(game.platform.tint)
+            .controlSize(.large)
+            launchCard(game)
+            actions(game)
         }
     }
 
