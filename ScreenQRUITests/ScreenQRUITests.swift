@@ -88,18 +88,12 @@ final class ScreenQRUITests: XCTestCase {
         sleep(1)
         snap("06-finish-action-button")
 
-        // 단축어가 시험용 QR을 읽은 것처럼 앱을 연다.
-        // XCUIApplication.open은 앱을 다시 켜므로, 처음 상태로 되돌리는 UITEST_RESET은 빼서 보던 페이지가 이어지게 한다.
-        // (앱이 꺼져 있을 때 단축어가 실행된 경우와 같다.)
-        app.launchArguments = ["UITEST"]
-        var components = URLComponents()
-        components.scheme = "screenqr"
-        components.host = "show"
-        components.queryItems = [URLQueryItem(name: "text", value: "Screen QR Scanner 테스트 성공!")]
-        if let url = components.url {
-            app.open(url)
-        }
-        XCTAssertTrue(app.staticTexts["잘 동작해요!"].waitForExistence(timeout: 10), "시험용 QR을 읽으면 성공 표시")
+        // 단축어 동작이 시험용 QR을 읽어 앱에 넘긴 것처럼 다시 켠다 (앱이 꺼져 있다가 단축어로 켜진 경우와 같다).
+        // UITEST_RESET은 빼서 보던 페이지(실행 방법)가 이어지게 한다.
+        app.terminate()
+        app.launchArguments = ["UITEST", "UITEST_INBOX"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["잘 동작해요!"].waitForExistence(timeout: 20), "단축어 동작이 시험용 QR을 넘기면 성공 표시")
         sleep(1)
         snap("07-finish-tested")
 

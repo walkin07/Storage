@@ -144,8 +144,8 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
 /// 처음 설치하면 먼저 나오는 단축어 만들기 튜토리얼.
 /// 한 단계씩 보여 주고 ‘다음’으로 넘어가며, 마지막 페이지에서 실행 방법과 Safari 확장을 안내한다.
 struct TutorialView: View {
-    /// 마지막 페이지의 시험용 QR 내용. 단축어로 읽으면 ContentView가 알려 준다.
-    static let testPayload = "Screen QR Scanner 테스트 성공!"
+    /// 실행 방법 페이지의 시험용 QR 내용 (링크가 아닌 글). 단축어 동작이 읽으면 앱 안에서 바로 ContentView에 전해진다.
+    static let testPayload = "Screen QR Scanner 시험용 QR"
     static let testQR: UIImage? = QRGenerator.image(for: testPayload)
 
     let entry: TutorialEntry
@@ -973,8 +973,8 @@ private struct TestRow: View {
                 Text(passed ? "잘 동작해요!" : "바로 시험해 보기")
                     .font(.headline)
                 Text(passed
-                    ? "이제 어떤 앱에서든 화면 속 QR을 바로 열 수 있어요."
-                    : "설정한 방법으로 단축어를 실행해 이 QR이 열리면 성공이에요. 처음 한 번은 ‘항상 허용’을 눌러 주세요.")
+                    ? "단축어가 이 QR을 읽었어요. 이제 어떤 앱에서든 화면 속 QR을 바로 열 수 있어요."
+                    : "이 화면에서 방금 설정한 방법(뒷면 톡톡 등)으로 단축어를 실행해 보세요. 단축어가 이 QR을 읽으면 여기가 ‘잘 동작해요!’로 바뀌어요. 처음 한 번은 ‘항상 허용’을 눌러 주세요.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -42,6 +42,8 @@ struct ContentView: View {
     @State private var tutorialTestPassed = false
     @State private var mode: AppMode = .scan
     @State private var scanned: ScannedText?
+    /// 같은 QR 내용이 앱 안 전달과 URL로 두 번 올 수 있어서, 잠깐 사이에 같은 내용은 한 번만 처리한다.
+    @State private var lastReceived: (text: String, at: Date)?
 
     var body: some View {
         ZStack {
@@ -72,13 +74,16 @@ struct ContentView: View {
         .sensoryFeedback(trigger: showTutorial) { _, shown -> SensoryFeedback? in
             shown ? SensoryFeedback.impact(weight: .light) : SensoryFeedback.impact(weight: .medium)
         }
+        // 단축어 동작이 읽은 ‘링크가 아닌 QR’ (앱 안에서 바로 전해진다)
+        .onReceive(QRInbox.shared.$pending) { item in
+            guard let item else { return }
+            receive(item.text)
+            // 받는 중에 바로 지우지 않고 다음 차례에 지운다 (같은 값을 내보내는 중에 바꾸지 않게).
+            Task { @MainActor in QRInbox.shared.clear(item.id) }
+        }
         .onOpenURL { url in
-            guard let text = QRPayload.text(from: url) else { return }
-            if showTutorial && text == TutorialView.testPayload {
-                // 튜토리얼 마지막 페이지의 시험용 QR을 단축어로 읽었다.
-                tutorialTestPassed = true
-            } else {
-                scanned = ScannedText(text: text)
+            if let text = QRPayload.text(from: url) {
+                receive(text)
             }
         }
         .sheet(item: $scanned) { item in
@@ -107,6 +112,17 @@ struct ContentView: View {
         .scrollBounceBehavior(.basedOnSize)
         .scrollDismissesKeyboard(.interactively)
         .background(Color.white.ignoresSafeArea())
+    }
+
+    /// 단축어로 읽은 링크가 아닌 QR: 튜토리얼의 시험용 QR이면 성공 표시, 아니면 내용을 보여 준다.
+    private func receive(_ text: String) {
+        if let last = lastReceived, last.text == text, Date().timeIntervalSince(last.at) < 3 { return }
+        lastReceived = (text, Date())
+        if showTutorial && text == TutorialView.testPayload {
+            tutorialTestPassed = true
+        } else {
+            scanned = ScannedText(text: text)
+        }
     }
 
     private func openTutorial() {
