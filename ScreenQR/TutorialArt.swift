@@ -85,8 +85,6 @@ struct ShortcutMock: View {
     let scene: MockScene
     var showsBackLink = false
     var still = false
-    /// 반복을 처음부터 다시 시작하는 순간: 화면 속 내용만 잠깐 지운다 (틀과 다이내믹 아일랜드는 그대로).
-    var contentHidden = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -104,7 +102,6 @@ struct ShortcutMock: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .opacity(contentHidden ? 0 : 1)
         }
         .modifier(PhoneScreen())
     }
@@ -130,7 +127,6 @@ struct ShortcutMock: View {
                 }
                 Spacer(minLength: 0)
             }
-            .opacity(contentHidden ? 0 : 1)
         }
         .frame(height: 20)
         .padding(.bottom, 12)
@@ -573,8 +569,6 @@ struct SafariScene: Equatable {
 
 struct SafariMock: View {
     let scene: SafariScene
-    /// 반복을 처음부터 다시 시작하는 순간: 화면 속 내용만 잠깐 지운다.
-    var contentHidden = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -596,7 +590,6 @@ struct SafariMock: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .opacity(contentHidden ? 0 : 1)
         }
         .modifier(PhoneScreen())
     }

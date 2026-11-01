@@ -541,8 +541,6 @@ private struct StepPage: View {
     @State private var activeLine: Int?
     /// 그림 반복의 마지막 장면: ‘다 했다면 아래 다음을 눌러 주세요’
     @State private var showHint: Bool
-    /// 반복을 처음부터 다시 시작하는 순간 (그림을 잠깐 지운다)
-    @State private var restarting = false
 
     init(
         page: TutorialPage,
@@ -565,7 +563,7 @@ private struct StepPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: compact ? 18 : 24) {
-            ShortcutMock(scene: scene, showsBackLink: page == .open, still: still, contentHidden: restarting)
+            ShortcutMock(scene: scene, showsBackLink: page == .open, still: still)
                 .frame(height: compact ? 236 : 290)
                 .overlay {
                     if showHint {
@@ -649,24 +647,14 @@ private struct StepPage: View {
         activeLine = 0
     }
 
-    /// 한 바퀴의 끝. 단축어 앱에 다녀온 뒤에는 ‘다음’ 안내를 보여 주고, 그 전에는 바로 첫 장면으로 되돌린다.
+    /// 한 바퀴의 끝. 단축어 앱에 다녀온 뒤에는 ‘다음’ 안내를 보여 주고, 그 전에는 첫 장면으로 되돌린다.
+    /// 첫 장면으로 돌아가는 그림과 1번 아이콘은 같은 애니메이션 안에서 같은 순간에 바뀐다.
     private func finishLoop() async -> Bool {
         if returned {
             return await showNextHint(thenReset: resetToStart)
         }
-        return await restartLoop()
-    }
-
-    /// 첫 장면으로: 그림을 잠깐 지우는 동안 아래 번호도 같은 순간에 1번으로 바뀌고, 첫 장면으로 다시 나타난다.
-    private func restartLoop() async -> Bool {
-        withAnimation(.easeInOut(duration: 0.3)) {
-            restarting = true
-            activeLine = 0
-        }
-        guard await tutorialPause(340) else { return false }
-        resetToStart()
-        withAnimation(.easeInOut(duration: 0.3)) { restarting = false }
-        return await tutorialPause(500)
+        withAnimation(.smooth(duration: 0.4)) { resetToStart() }
+        return await tutorialPause(800)
     }
 
     /// 마지막 장면: ‘다음’ 안내를 띄우고, 안내가 덮고 있는 동안 그림을 첫 장면으로 되돌린 뒤 걷어 낸다.
@@ -689,12 +677,10 @@ private struct StepPage: View {
             withAnimation(.spring(duration: 0.55, bounce: 0.18)) { scene.inShortcuts = true }
             guard await tutorialPause(1500) else { return }
             withAnimation(.smooth(duration: 0.3)) { activeLine = 1 }
-            guard await tutorialPause(600) else { return }
+            guard await tutorialPause(900) else { return }
             scene.tapBack += 1
             guard await tutorialPause(380) else { return }
-            withAnimation(.smooth(duration: 0.45)) { scene.inShortcuts = false }
-            // 앱으로 돌아온 모습까지가 2번 설명이라, 바로 처음으로 가지 않고 잠깐 보여 준다.
-            guard await tutorialPause(1300) else { return }
+            // ◀로 이 앱에 돌아온 화면이 곧 첫 장면이라, 돌아오는 순간 1번 아이콘도 함께 켜진다.
             guard await finishLoop() else { return }
         }
     }
@@ -892,8 +878,6 @@ private struct SafariPage: View {
     @State private var activeLine: Int?
     /// 그림 반복의 마지막 장면: ‘설정했다면 아래 완료를 눌러 주세요’
     @State private var showHint: Bool
-    /// 반복을 처음부터 다시 시작하는 순간 (그림을 잠깐 지운다)
-    @State private var restarting = false
 
     init(still: Bool, compact: Bool, returned: Bool) {
         self.still = still
@@ -906,7 +890,7 @@ private struct SafariPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: compact ? 18 : 24) {
-            SafariMock(scene: scene, contentHidden: restarting)
+            SafariMock(scene: scene)
                 .frame(height: compact ? 236 : 290)
                 .overlay {
                     if showHint {
@@ -965,15 +949,9 @@ private struct SafariPage: View {
             withAnimation(.smooth(duration: 0.35)) { showHint = false }
             return await tutorialPause(450)
         }
-        // 첫 장면으로: 그림을 잠깐 지우는 동안 아래 번호도 같은 순간에 1번으로
-        withAnimation(.easeInOut(duration: 0.3)) {
-            restarting = true
-            activeLine = 0
-        }
-        guard await tutorialPause(340) else { return false }
-        resetToStart()
-        withAnimation(.easeInOut(duration: 0.3)) { restarting = false }
-        return await tutorialPause(500)
+        // 첫 장면(설정 화면)으로 돌아가는 그림과 1번 아이콘이 같은 순간에 바뀐다.
+        withAnimation(.smooth(duration: 0.4)) { resetToStart() }
+        return await tutorialPause(800)
     }
 
     /// 설정에서 켜기 → Safari 주소창 메뉴 → ‘Screen QR Scanner’ → 페이지 속 QR이 열림 (→ 다녀온 뒤에는 안내)
