@@ -23,6 +23,10 @@ struct ScreenQRApp: App {
         if ProcessInfo.processInfo.arguments.contains("UITEST_INBOX") {
             QRInbox.shared.deliver(TutorialView.testPayload)
         }
+        // UI 테스트(앱 스토어 스크린샷): 단축어가 글 QR을 읽어 넘긴 것처럼 시작 (배포 빌드에서는 nil)
+        if let text = uiTestDefault("uitest.inboxText") {
+            QRInbox.shared.deliver(text)
+        }
     }
 
     var body: some Scene {

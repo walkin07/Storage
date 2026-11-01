@@ -21,9 +21,9 @@ final class AppStoreScreenshots: XCTestCase {
         shoot("33-steps", ["UITEST", "UITEST_RESET", "-tutorial.page", "3"]) { app in
             app.staticTexts["‘이미지 속 QR 열기’ 넣기"].waitForExistence(timeout: 20)
         }
-        // 4. 기본 화면: 사진에서 QR 열기
-        shoot("34-photo", ["UITEST", "-tutorial.done", "YES"]) { app in
-            app.buttons["home.tutorial"].waitForExistence(timeout: 20)
+        // 4. 기본 화면(사진에서 QR 열기) + 글 QR을 열었을 때의 내용 시트
+        shoot("34-photo", ["UITEST", "-tutorial.done", "YES", "-uitest.inboxText", "환영합니다! 와이파이 비밀번호는 coffee1234 예요."]) { app in
+            app.staticTexts["QR 내용"].waitForExistence(timeout: 20)
         }
         // 5. QR 만들기
         shoot("35-make", ["UITEST", "-tutorial.done", "YES", "-uitest.mode", "make", "-uitest.makeInput", "https://example.com"]) { app in
@@ -38,7 +38,8 @@ final class AppStoreScreenshots: XCTestCase {
     @MainActor
     private func shoot(_ name: String, _ arguments: [String], ready: (XCUIApplication) -> Bool) {
         let app = XCUIApplication()
-        app.launchArguments = arguments
+        // 시스템이 그리는 버튼(붙여넣기 등)도 한국어로
+        app.launchArguments = arguments + ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
         app.launch()
         XCTAssertTrue(ready(app), "\(name) 화면이 떠야 함")
         sleep(2)
