@@ -38,7 +38,7 @@ enum MockAction: Equatable {
 struct MockScene: Equatable {
     /// false면 단축어 앱으로 가기 전, 이 앱 화면
     var inShortcuts = true
-    /// 단축어에 들어간 동작 수 (0~2)
+    /// 단축어에 들어간 동작 수 (0~2). 단축어는 따로 저장할 필요 없이 자동으로 저장된다.
     var blocks = 0
     /// 검색창에 입력한 글자
     var query = ""
@@ -46,14 +46,11 @@ struct MockScene: Equatable {
     var searching = false
     /// 검색 결과로 보이는 동작
     var result: MockAction?
-    /// 오른쪽 위 완료(✓)를 누른 상태
-    var doneLit = false
     // 손가락 표시: 값이 바뀔 때마다 그 자리를 한 번 누른다.
     var tapOpen = 0
     var tapBack = 0
     var tapSearch = 0
     var tapResult = 0
-    var tapDone = 0
 
     /// 누른 횟수는 그대로 두고 화면만 처음으로 되돌린다 (횟수가 바뀌면 손가락이 한 번 더 나오기 때문).
     mutating func reset(blocks: Int) {
@@ -62,7 +59,6 @@ struct MockScene: Equatable {
         query = ""
         searching = false
         result = nil
-        doneLit = false
     }
 
     /// 반복 애니메이션의 첫 장면
@@ -78,7 +74,7 @@ struct MockScene: Equatable {
     static func still(for page: TutorialPage) -> MockScene {
         switch page {
         case .screenshot: MockScene(query: "스크린샷", searching: true, result: .screenshot)
-        case .qr: MockScene(blocks: 2, doneLit: true)
+        case .qr: MockScene(blocks: 2)
         default: MockScene()
         }
     }
@@ -89,6 +85,8 @@ struct ShortcutMock: View {
     let scene: MockScene
     var showsBackLink = false
     var still = false
+    /// 반복을 처음부터 다시 시작하는 순간: 화면 속 내용만 잠깐 지운다 (틀과 다이내믹 아일랜드는 그대로).
+    var contentHidden = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -106,6 +104,7 @@ struct ShortcutMock: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .opacity(contentHidden ? 0 : 1)
         }
         .modifier(PhoneScreen())
     }
@@ -131,6 +130,7 @@ struct ShortcutMock: View {
                 }
                 Spacer(minLength: 0)
             }
+            .opacity(contentHidden ? 0 : 1)
         }
         .frame(height: 20)
         .padding(.bottom, 12)
@@ -166,14 +166,8 @@ struct ShortcutMock: View {
                 Text("새 단축어")
                     .font(.system(size: 15, weight: .bold))
                 Spacer()
-                Image(systemName: "checkmark")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(scene.doneLit ? Color.white : Color.blue)
-                    .frame(width: 30, height: 30)
-                    .background(scene.doneLit ? Color.blue : Color.white, in: .circle)
-                    .shadow(color: .black.opacity(0.06), radius: 4, y: 1)
-                    .overlay { TapIndicator(tick: scene.tapDone) }
             }
+            .frame(height: 30)
             VStack(spacing: 8) {
                 if scene.blocks >= 1 {
                     MockActionBlock(action: .screenshot)
@@ -579,6 +573,8 @@ struct SafariScene: Equatable {
 
 struct SafariMock: View {
     let scene: SafariScene
+    /// 반복을 처음부터 다시 시작하는 순간: 화면 속 내용만 잠깐 지운다.
+    var contentHidden = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -600,6 +596,7 @@ struct SafariMock: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .opacity(contentHidden ? 0 : 1)
         }
         .modifier(PhoneScreen())
     }
@@ -815,7 +812,8 @@ struct PhoneScreen: ViewModifier {
                 RoundedRectangle(cornerRadius: 34, style: .continuous)
                     .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
             }
-            .shadow(color: .black.opacity(0.08), radius: 24, y: 12)
+            // 위로 번지면 위쪽 막대와의 경계에서 잘려 회색 띠처럼 보여서, 아래쪽으로만 옅게 깐다.
+            .shadow(color: .black.opacity(0.06), radius: 12, y: 10)
             .environment(\.dynamicTypeSize, .large)
             .accessibilityHidden(true)
     }

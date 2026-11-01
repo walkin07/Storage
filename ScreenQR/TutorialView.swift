@@ -115,7 +115,7 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
             [
                 Text("다시 ‘QR’을 입력하고 ‘이미지\u{00A0}속\u{00A0}QR\u{00A0}열기’\u{2060}를 눌러요"),
                 Text("‘스크린샷에서\u{00A0}QR\u{00A0}열기’\u{2060}로 이어졌는지 확인해요"),
-                Text("오른쪽 위 완료(\(Image(systemName: "checkmark")))를 누르면 끝!"),
+                Text("따로 저장할 필요 없어요. 왼쪽 위 ‘\(Image(systemName: "arrowtriangle.left.fill"))\u{00A0}Screen\u{00A0}QR\u{00A0}Scanner’\u{2060}로 돌아오면 끝!"),
             ]
         case .safari:
             [
@@ -134,7 +134,6 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
     /// 그림 반복의 마지막 장면에 나오는 안내
     var nextHint: String {
         switch self {
-        case .qr: "완료까지 눌렀다면 아래 ‘다음’을 눌러 주세요"
         case .safari: "설정했다면 아래 ‘완료’를 눌러 주세요"
         default: "다 했다면 아래 ‘다음’을 눌러 주세요"
         }
@@ -397,7 +396,7 @@ struct TutorialView: View {
                     }
                 }
                 .padding(.horizontal, 24)
-                .padding(.top, 8)
+                .padding(.top, 16)
                 .padding(.bottom, 24)
                 .frame(
                     maxWidth: .infinity,
@@ -533,6 +532,8 @@ private struct StepPage: View {
     @State private var activeLine: Int?
     /// 그림 반복의 마지막 장면: ‘다 했다면 아래 다음을 눌러 주세요’
     @State private var showHint: Bool
+    /// 반복을 처음부터 다시 시작하는 순간 (그림을 잠깐 지운다)
+    @State private var restarting = false
 
     init(
         page: TutorialPage,
@@ -555,7 +556,8 @@ private struct StepPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: compact ? 18 : 24) {
-            ShortcutMock(scene: scene, showsBackLink: page == .open, still: still)
+            // 1단계와 3단계는 왼쪽 위 ‘◀ Screen QR Scanner’로 돌아오는 것까지 보여 준다.
+            ShortcutMock(scene: scene, showsBackLink: page == .open || page == .qr, still: still, contentHidden: restarting)
                 .frame(height: compact ? 236 : 290)
                 .overlay {
                     if showHint {
@@ -644,8 +646,19 @@ private struct StepPage: View {
         if returned {
             return await showNextHint(thenReset: resetToStart)
         }
-        withAnimation(.smooth(duration: 0.35)) { resetToStart() }
-        return await tutorialPause(450)
+        return await restartLoop()
+    }
+
+    /// 첫 장면으로: 그림을 잠깐 지우는 동안 아래 번호도 같은 순간에 1번으로 바뀌고, 첫 장면으로 다시 나타난다.
+    private func restartLoop() async -> Bool {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            restarting = true
+            activeLine = 0
+        }
+        guard await tutorialPause(340) else { return false }
+        resetToStart()
+        withAnimation(.easeInOut(duration: 0.3)) { restarting = false }
+        return await tutorialPause(500)
     }
 
     /// 마지막 장면: ‘다음’ 안내를 띄우고, 안내가 덮고 있는 동안 그림을 첫 장면으로 되돌린 뒤 걷어 낸다.
@@ -672,7 +685,8 @@ private struct StepPage: View {
             scene.tapBack += 1
             guard await tutorialPause(380) else { return }
             withAnimation(.smooth(duration: 0.45)) { scene.inShortcuts = false }
-            guard await tutorialPause(700) else { return }
+            // 앱으로 돌아온 모습까지가 2번 설명이라, 바로 처음으로 가지 않고 잠깐 보여 준다.
+            guard await tutorialPause(1300) else { return }
             guard await finishLoop() else { return }
         }
     }
@@ -707,7 +721,7 @@ private struct StepPage: View {
         }
     }
 
-    /// ‘QR’ 입력 → ‘이미지 속 QR 열기’ 추가(스크린샷이 이어짐) → 완료 (→ 다녀온 뒤에는 안내)
+    /// ‘QR’ 입력 → ‘이미지 속 QR 열기’ 추가(스크린샷이 이어짐) → 왼쪽 위로 돌아오기 (→ 다녀온 뒤에는 안내)
     private func playQR() async {
         while !Task.isCancelled {
             withAnimation(.smooth(duration: 0.3)) { activeLine = 0 }
@@ -733,12 +747,11 @@ private struct StepPage: View {
                 activeLine = 1
             }
             guard await tutorialPause(1600) else { return }
+            // 저장은 자동이라 왼쪽 위로 바로 돌아오면 끝
             withAnimation(.smooth(duration: 0.3)) { activeLine = 2 }
-            guard await tutorialPause(450) else { return }
-            scene.tapDone += 1
-            guard await tutorialPause(200) else { return }
-            withAnimation(.smooth(duration: 0.25)) { scene.doneLit = true }
-            guard await tutorialPause(1300) else { return }
+            guard await tutorialPause(600) else { return }
+            scene.tapBack += 1
+            guard await tutorialPause(1500) else { return }
             guard await finishLoop() else { return }
         }
     }
@@ -875,6 +888,8 @@ private struct SafariPage: View {
     @State private var activeLine: Int?
     /// 그림 반복의 마지막 장면: ‘설정했다면 아래 완료를 눌러 주세요’
     @State private var showHint: Bool
+    /// 반복을 처음부터 다시 시작하는 순간 (그림을 잠깐 지운다)
+    @State private var restarting = false
 
     init(still: Bool, compact: Bool, returned: Bool) {
         self.still = still
@@ -887,7 +902,7 @@ private struct SafariPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: compact ? 18 : 24) {
-            SafariMock(scene: scene)
+            SafariMock(scene: scene, contentHidden: restarting)
                 .frame(height: compact ? 236 : 290)
                 .overlay {
                     if showHint {
@@ -946,8 +961,15 @@ private struct SafariPage: View {
             withAnimation(.smooth(duration: 0.35)) { showHint = false }
             return await tutorialPause(450)
         }
-        withAnimation(.smooth(duration: 0.35)) { resetToStart() }
-        return await tutorialPause(450)
+        // 첫 장면으로: 그림을 잠깐 지우는 동안 아래 번호도 같은 순간에 1번으로
+        withAnimation(.easeInOut(duration: 0.3)) {
+            restarting = true
+            activeLine = 0
+        }
+        guard await tutorialPause(340) else { return false }
+        resetToStart()
+        withAnimation(.easeInOut(duration: 0.3)) { restarting = false }
+        return await tutorialPause(500)
     }
 
     /// 설정에서 켜기 → Safari 주소창 메뉴 → ‘Screen QR Scanner’ → 페이지 속 QR이 열림 (→ 다녀온 뒤에는 안내)
