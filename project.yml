@@ -1,6 +1,8 @@
 name: ScreenQR
 options:
   bundleIdPrefix: com.example
+  # 앱 글이 모두 한국어라 개발 언어도 한국어로 둔다. (영어로 두면 붙여넣기 · 취소 같은 시스템 버튼이 영어로 나온다)
+  developmentLanguage: ko
   deploymentTarget:
     iOS: "26.0"
 settings:
@@ -28,6 +30,8 @@ targets:
         CFBundleDisplayName: Screen QR Scanner
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: ko
+        CFBundleLocalizations: [ko]
         NSPhotoLibraryAddUsageDescription: 만든 QR 코드를 사진 앱에 저장해요.
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
