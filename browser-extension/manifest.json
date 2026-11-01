@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "화면 QR",
+  "name": "Screen QR Scanner",
   "description": "지금 보고 있는 화면의 QR 코드를 버튼 한 번으로 엽니다. 모든 처리는 브라우저 안에서만 이뤄집니다.",
   "version": "1.0",
   "icons": {
@@ -9,7 +9,7 @@
     "128": "images/icon-128.png"
   },
   "action": {
-    "default_title": "화면 QR (Alt+Shift+Q)",
+    "default_title": "Screen QR Scanner (Alt+Shift+Q)",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "images/toolbar-16.png",

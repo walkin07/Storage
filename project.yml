@@ -23,9 +23,10 @@ targets:
     info:
       path: ScreenQR/Info.plist
       properties:
-        CFBundleDisplayName: 화면 QR
+        CFBundleDisplayName: Screen QR Scanner
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSPhotoLibraryAddUsageDescription: 만든 QR 코드를 사진 앱에 저장해요.
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIRequiresFullScreen: true
@@ -55,7 +56,7 @@ targets:
     info:
       path: SafariExtension/Info.plist
       properties:
-        CFBundleDisplayName: 화면 QR
+        CFBundleDisplayName: Screen QR Scanner
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:

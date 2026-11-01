@@ -39,13 +39,35 @@ enum Trigger: String, CaseIterable, Identifiable {
         case .controlCenter:
             ["제어 센터를 열고 빈 곳을 길게 누르기", "컨트롤 추가 → 단축어 → ‘QR 열기’ 선택", "제어 센터에서 한 번 누르기"]
         case .safari:
-            ["설정 → 앱 → Safari → 확장 프로그램", "화면 QR 켜기", "주소창의 메뉴 → 화면 QR (단축어 없이 동작)"]
+            ["설정 → 앱 → Safari → 확장 프로그램", "Screen QR Scanner 켜기", "주소창의 메뉴 → Screen QR Scanner (단축어 없이 동작)"]
+        }
+    }
+}
+
+/// 위쪽 전환: 화면 속 QR 읽기 설정 / 링크로 QR 만들기
+enum AppMode: String, CaseIterable, Identifiable {
+    case scan, make
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .scan: "QR 읽기"
+        case .make: "QR 만들기"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .scan: "qrcode.viewfinder"
+        case .make: "qrcode"
         }
     }
 }
 
 struct ContentView: View {
     @Environment(\.openURL) private var openURL
+    @State private var mode: AppMode = .scan
     @State private var trigger: Trigger = .backTap
     @State private var scanned: ScannedText?
     @State private var tapCount = 0
@@ -54,20 +76,28 @@ struct ContentView: View {
         ScrollView {
             VStack(spacing: 32) {
                 header
-                shortcutCard
-                triggerCard
-                Text("스크린샷은 저장되지 않고, QR은 기기 안에서만 읽어요.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                modePicker
+                switch mode {
+                case .scan:
+                    shortcutCard
+                    triggerCard
+                    Text("스크린샷은 저장되지 않고, QR은 기기 안에서만 읽어요.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                case .make:
+                    QRMakerView()
+                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 40)
         }
         .scrollBounceBehavior(.basedOnSize)
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.white.ignoresSafeArea())
         .preferredColorScheme(.light)
         .sensoryFeedback(.selection, trigger: trigger)
+        .sensoryFeedback(.selection, trigger: mode)
         .sensoryFeedback(.impact(weight: .light), trigger: tapCount)
         .sensoryFeedback(.success, trigger: scanned?.id)
         .onOpenURL { url in
@@ -87,10 +117,35 @@ struct ContentView: View {
                 .frame(width: 88, height: 88)
                 .glassEffect(.regular.interactive(), in: .circle)
             VStack(spacing: 6) {
-                Text("화면 QR")
+                Text("Screen QR Scanner")
                     .font(.largeTitle.bold())
-                Text("버튼 한 번으로 화면 속 QR을 열어요")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Text("화면 속 QR을 버튼 한 번으로 열고, 링크로 QR을 만들어요")
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private var modePicker: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                ForEach(AppMode.allCases) { item in
+                    Button {
+                        withAnimation(.snappy) { mode = item }
+                    } label: {
+                        Label(item.title, systemImage: item.symbol)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(item == mode ? Color.white : Color.primary)
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(
+                        item == mode ? .regular.tint(.black).interactive() : .regular.interactive(),
+                        in: .capsule
+                    )
+                }
             }
         }
     }

@@ -84,7 +84,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          TITLE="화면 QR (최신 빌드)"
+          TITLE="Screen QR Scanner (최신 빌드)"
           NOTES="ScreenQR-unsigned.ipa: Sideloadly 등으로 아이폰에 설치 · ScreenQR-browser-extension.zip: Chrome/Edge/Whale/Brave/Firefox 확장 (커밋 ${GITHUB_SHA::7})"
           if gh release view screenqr-latest >/dev/null 2>&1; then
             gh release upload screenqr-latest dist/* --clobber

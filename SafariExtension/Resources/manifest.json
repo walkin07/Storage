@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "화면 QR",
+  "name": "Screen QR Scanner",
   "description": "지금 보고 있는 페이지의 QR 코드를 바로 엽니다.",
   "version": "1.0",
   "icons": {
