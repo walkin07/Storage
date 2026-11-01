@@ -15,6 +15,9 @@ final class LibraryStore: ObservableObject {
         coversFolder = folder.appendingPathComponent("Covers", isDirectory: true)
         try? FileManager.default.createDirectory(at: coversFolder, withIntermediateDirectories: true)
         load()
+        #if DEBUG
+        applyDemoArgument()
+        #endif
     }
 
     func game(withID id: UUID) -> Game? {
@@ -216,3 +219,50 @@ final class LibraryStore: ObservableObject {
         }
     }
 }
+
+#if DEBUG
+// UI 테스트와 스크린샷용 예시 목록 (-gamedeck-demo library | empty). 릴리스 빌드(배포용 IPA)에는 들어가지 않고, 저장하지도 않는다.
+extension LibraryStore {
+    fileprivate func applyDemoArgument() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-gamedeck-demo"), index + 1 < arguments.count else { return }
+        switch arguments[index + 1] {
+        case "empty":
+            games = []
+        case "library":
+            games = Self.demoGames()
+        default:
+            break
+        }
+    }
+
+    private static func demoGames() -> [Game] {
+        let now = Date()
+        func steam(_ appID: Int, _ title: String, runner: EngineID, launch: LaunchMethod, hoursAgo: Double? = nil, favorite: Bool = false) -> Game {
+            let art = SteamAPI.fallbackArt(appID: appID)
+            return Game(
+                title: title, platform: .steam, runner: runner, launch: launch, steamAppID: appID,
+                artURLs: art.covers, heroURL: art.hero, favorite: favorite,
+                lastPlayed: hoursAgo.map { now.addingTimeInterval(-$0 * 3600) }, playCount: hoursAgo == nil ? 0 : 3
+            )
+        }
+        func nx(_ titleID: String, _ title: String, launch: LaunchMethod, runner: EngineID, hoursAgo: Double? = nil) -> Game {
+            Game(
+                title: title, platform: .nintendoSwitch, runner: runner, launch: launch, titleID: titleID,
+                lastPlayed: hoursAgo.map { now.addingTimeInterval(-$0 * 3600) }, playCount: hoursAgo == nil ? 0 : 5
+            )
+        }
+        return [
+            steam(620, "Portal 2", runner: .madeira, launch: .madeira(exe: #"C:\Program Files (x86)\Steam\steamapps\common\Portal 2\portal2.exe"#), hoursAgo: 1, favorite: true),
+            nx("0100152000022000", "Mario Kart 8 Deluxe", launch: .melonx(titleID: "0100152000022000"), runner: .melonx, hoursAgo: 5),
+            steam(413150, "Stardew Valley", runner: .steamLink, launch: .shortcut(name: "Steam Link"), hoursAgo: 30),
+            nx("0100F2C0115B6000", "The Legend of Zelda: Tears of the Kingdom", launch: .shortcut(name: "젤다 왕눈"), runner: .nxnative, hoursAgo: 50),
+            steam(1145360, "Hades", runner: .ideck, launch: .openEngine(.ideck)),
+            steam(367520, "Hollow Knight", runner: .playport, launch: .openEngine(.playport)),
+            nx("01006F8002326000", "Animal Crossing: New Horizons", launch: .stikDebug(bundleID: "org.nxnative.01006f8002326000"), runner: .nxnative),
+            steam(1245620, "ELDEN RING", runner: .steamLink, launch: .shortcut(name: "Steam Link")),
+            Game(title: "다른 에뮬레이터 게임", platform: .other, runner: nil, launch: .url("someapp://play")),
+        ]
+    }
+}
+#endif

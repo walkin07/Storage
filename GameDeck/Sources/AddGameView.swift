@@ -218,7 +218,7 @@ struct SteamSearchView: View {
                 }
             }
         }
-        .overlay { overlay }
+        .overlay { statusOverlay }
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "스팀 게임 이름")
         .task(id: query) { await search() }
         .navigationTitle("스팀에서 찾기")
@@ -226,7 +226,7 @@ struct SteamSearchView: View {
     }
 
     @ViewBuilder
-    private var overlay: some View {
+    private var statusOverlay: some View {
         if loading {
             ProgressView()
         } else if results.isEmpty, failure == nil {

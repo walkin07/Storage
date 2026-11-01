@@ -18,7 +18,9 @@ targets:
     sources:
       - path: Sources
       - path: Assets.xcassets
-    scheme: {}
+    scheme:
+      testTargets:
+        - GameDeckUITests
     info:
       path: Info.plist
       properties:
@@ -33,7 +35,6 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        UIRequiresFullScreen: true
         UIUserInterfaceStyle: Dark
         ITSAppUsesNonExemptEncryption: false
         # MeloNX가 게임 목록을 돌려줄 때(gamedeck://melonx?games=…)와 바로가기(gamedeck://play, gamedeck://resume)에 쓴다.
@@ -57,3 +58,17 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.walkin07.gamedeck
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  # 시뮬레이터에서 화면을 띄워 보는 UI 테스트 (CI의 ui-test 작업). 배포용 IPA에는 들어가지 않는다.
+  GameDeckUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: GameDeck
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.walkin07.gamedeck.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: GameDeck
