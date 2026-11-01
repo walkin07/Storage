@@ -6,6 +6,7 @@ final class ScreenQRUITests: XCTestCase {
         continueAfterFailure = true
     }
 
+    /// 처음 설치 → 끝까지 보고 완료 → 기본 화면 버튼으로 다시 열기 (이때는 ‘나중에’ 대신 X)
     @MainActor
     func testFirstLaunchTutorial() {
         let app = XCUIApplication()
@@ -19,6 +20,7 @@ final class ScreenQRUITests: XCTestCase {
         XCTAssertTrue(primary.label.contains("튜토리얼 보기"), "첫 버튼 이름: \(primary.label)")
         XCTAssertTrue(app.buttons["tutorial.skip"].exists, "처음 화면에 건너뛰기 버튼")
         XCTAssertFalse(app.buttons["tutorial.later"].exists, "처음 화면에는 위쪽 ‘나중에’가 없어야 함")
+        XCTAssertFalse(app.buttons["tutorial.close"].exists, "처음 설치 화면에는 X가 없어야 함")
         XCTAssertFalse(app.buttons["home.tutorial"].exists, "튜토리얼 뒤의 기본 화면은 가려져 있어야 함")
         sleep(1)
         snap("01-welcome")
@@ -26,7 +28,8 @@ final class ScreenQRUITests: XCTestCase {
         primary.tap()
         XCTAssertTrue(app.staticTexts["새 단축어 열기"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["tutorial.skip"].exists, "튜토리얼을 시작하면 건너뛰기 대신 위쪽 ‘나중에’")
-        XCTAssertTrue(app.buttons["tutorial.later"].exists)
+        XCTAssertTrue(app.buttons["tutorial.later"].exists, "처음 보는 중에는 ‘나중에’")
+        XCTAssertFalse(app.buttons["tutorial.close"].exists)
         let openShortcuts = app.buttons["tutorial.openShortcuts"]
         XCTAssertTrue(openShortcuts.exists)
         sleep(1)
@@ -44,6 +47,15 @@ final class ScreenQRUITests: XCTestCase {
         )
         sleep(1)
         snap("02-step-open-returned")
+
+        // 처음 보는 중에 이전으로 돌아가면 처음 설치 화면 그대로 (건너뛰기 있음, X 없음)
+        app.buttons["tutorial.back"].tap()
+        XCTAssertTrue(app.buttons["tutorial.skip"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["tutorial.close"].exists)
+        sleep(1)
+        primary.tap()
+        XCTAssertTrue(app.staticTexts["새 단축어 열기"].waitForExistence(timeout: 5))
+        sleep(1)
 
         primary.tap()
         XCTAssertTrue(app.staticTexts["‘스크린샷 찍기’ 넣기"].waitForExistence(timeout: 5))
@@ -66,6 +78,7 @@ final class ScreenQRUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["단축어 완성!"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["실행 방법 고르기"].exists)
         sleep(2)
+        XCTAssertTrue(app.buttons["tutorial.later"].exists, "실행 방법 페이지는 마지막이 아니라 ‘나중에’가 있어야 함")
         snap("05-finish")
 
         let actionButton = app.buttons["trigger.actionButton"]
@@ -87,10 +100,17 @@ final class ScreenQRUITests: XCTestCase {
             app.open(url)
         }
         XCTAssertTrue(app.staticTexts["잘 동작해요!"].waitForExistence(timeout: 10), "시험용 QR을 읽으면 성공 표시")
-        app.swipeUp()
         sleep(1)
-        XCTAssertTrue(app.staticTexts["Safari 확장 프로그램"].exists)
         snap("07-finish-tested")
+
+        // 마지막 페이지: Safari 확장 프로그램 (따로 한 페이지라 놓치지 않는다)
+        primary.tap()
+        XCTAssertTrue(app.staticTexts["Safari에서는 단축어 없이도 돼요"].waitForExistence(timeout: 5), "Safari 확장 페이지")
+        sleep(1)
+        XCTAssertTrue(primary.label.contains("완료"), "마지막 페이지 버튼: \(primary.label)")
+        XCTAssertFalse(app.buttons["tutorial.later"].exists, "마지막 페이지에는 아래 ‘완료’만")
+        XCTAssertFalse(app.buttons["tutorial.close"].exists)
+        snap("08-safari")
 
         primary.tap() // 완료
         let reopen = app.buttons["home.tutorial"]
@@ -98,16 +118,29 @@ final class ScreenQRUITests: XCTestCase {
         sleep(1)
         XCTAssertTrue(reopen.isHittable)
         XCTAssertFalse(primary.exists, "완료하면 튜토리얼이 닫혀야 함")
-        snap("08-home")
+        snap("09-home")
 
+        // 끝까지 보고 완료를 누른 뒤 다시 열면: 바로 1단계, 위에는 ‘나중에’ 대신 X
         reopen.tap()
         XCTAssertTrue(app.staticTexts["새 단축어 열기"].waitForExistence(timeout: 5), "버튼으로 다시 열면 바로 1단계부터")
-        XCTAssertFalse(app.buttons["tutorial.skip"].exists)
         sleep(1)
-        snap("09-reopened")
+        XCTAssertTrue(app.buttons["tutorial.close"].exists, "완료한 적이 있으면 X")
+        XCTAssertFalse(app.buttons["tutorial.later"].exists, "완료한 적이 있으면 ‘나중에’가 없어야 함")
+        XCTAssertFalse(app.buttons["tutorial.skip"].exists)
+        snap("10-reopened-completed")
 
-        app.buttons["tutorial.later"].tap()
-        XCTAssertTrue(reopen.waitForExistence(timeout: 5), "나중에를 누르면 기본 화면")
+        // 이전으로 처음 화면에 가면: 건너뛰기 없이 위에 X
+        app.buttons["tutorial.back"].tap()
+        sleep(1)
+        XCTAssertTrue(primary.label.contains("튜토리얼 보기"), "처음 화면으로 돌아와야 함: \(primary.label)")
+        XCTAssertFalse(app.buttons["tutorial.skip"].exists, "다시 연 튜토리얼의 첫 화면에는 건너뛰기가 없어야 함")
+        XCTAssertTrue(app.buttons["tutorial.close"].exists, "다시 연 튜토리얼의 첫 화면에는 X")
+        snap("11-reopened-welcome")
+
+        app.buttons["tutorial.close"].tap()
+        XCTAssertTrue(reopen.waitForExistence(timeout: 5), "X를 누르면 기본 화면")
+        sleep(1)
+        XCTAssertFalse(primary.exists)
 
         // 끝낸 뒤에 다시 켜면 튜토리얼 없이 기본 화면
         app.terminate()
@@ -117,7 +150,7 @@ final class ScreenQRUITests: XCTestCase {
         XCTAssertFalse(app.buttons["tutorial.primary"].exists, "끝낸 뒤에는 튜토리얼이 다시 뜨지 않아야 함")
     }
 
-    /// 처음 화면에서 건너뛰기를 고르면 기본 화면으로 가고, 다시 켜도 튜토리얼이 뜨지 않는다.
+    /// 처음 화면에서 건너뛰기 → 기본 화면. 끝까지 보지 않았으니 다시 열면 위에 ‘나중에’, 첫 화면에는 X.
     @MainActor
     func testSkipOnFirstLaunch() {
         let app = XCUIApplication()
@@ -131,7 +164,23 @@ final class ScreenQRUITests: XCTestCase {
         XCTAssertTrue(home.waitForExistence(timeout: 5), "건너뛰기를 누르면 기본 화면")
         sleep(1)
         XCTAssertTrue(home.isHittable)
-        snap("10-skipped-home")
+        snap("12-skipped-home")
+
+        home.tap()
+        XCTAssertTrue(app.staticTexts["새 단축어 열기"].waitForExistence(timeout: 5), "버튼으로 열면 바로 1단계부터")
+        sleep(1)
+        XCTAssertTrue(app.buttons["tutorial.later"].exists, "끝까지 보지 않았으면 ‘나중에’")
+        XCTAssertFalse(app.buttons["tutorial.close"].exists)
+        snap("13-skipped-reopened")
+
+        app.buttons["tutorial.back"].tap()
+        sleep(1)
+        XCTAssertFalse(app.buttons["tutorial.skip"].exists, "다시 연 튜토리얼의 첫 화면에는 건너뛰기가 없어야 함")
+        XCTAssertTrue(app.buttons["tutorial.close"].exists, "다시 연 튜토리얼의 첫 화면에는 X")
+        snap("14-skipped-reopened-welcome")
+
+        app.buttons["tutorial.close"].tap()
+        XCTAssertTrue(home.waitForExistence(timeout: 5), "X를 누르면 기본 화면")
 
         app.terminate()
         app.launchArguments = ["UITEST"]
@@ -143,15 +192,23 @@ final class ScreenQRUITests: XCTestCase {
     /// 애니메이션을 켠 채로 페이지마다 바로 띄워, 그림이 움직이는 중간 장면을 몇 장 찍는다.
     @MainActor
     func testTutorialAnimations() {
-        let pages = ["welcome", "open", "screenshot", "qr"]
-        for (index, name) in pages.enumerated() {
+        // (페이지 번호, 이름, 찍을 장 수) — 반복 마지막의 ‘다음’ 안내 장면까지 담기도록 넉넉히 찍는다.
+        let pages: [(Int, String, Int)] = [
+            (0, "welcome", 4),
+            (1, "open", 8),
+            (2, "screenshot", 4),
+            (3, "qr", 4),
+            (5, "safari", 10),
+        ]
+        let letters = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+        for (index, name, count) in pages {
             let app = XCUIApplication()
             // -tutorial.page N: 그 페이지부터 이어 보는 것처럼 시작
             app.launchArguments = ["UITEST_RESET", "-tutorial.page", "\(index)"]
             app.launch()
             XCTAssertTrue(app.buttons["tutorial.primary"].waitForExistence(timeout: 20), "\(name) 페이지가 떠야 함")
-            for frame in ["a", "b", "c", "d"] {
-                usleep(800_000)
+            for frame in letters.prefix(count) {
+                usleep(900_000)
                 snap("2\(index)-\(name)-\(frame)")
             }
             app.terminate()

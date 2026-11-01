@@ -31,11 +31,14 @@ struct ContentView: View {
     @Environment(\.openURL) private var openURL
     @AppStorage(TutorialKeys.done) private var tutorialDone = false
     @AppStorage(TutorialKeys.page) private var tutorialPage = 0
+    @AppStorage(TutorialKeys.completed) private var tutorialCompleted = false
     /// 처음 설치했으면 튜토리얼부터 보여 준다 (첫 화면부터 바로 보이도록 시작 값으로 정한다).
     @State private var showTutorial = !UserDefaults.standard.bool(forKey: TutorialKeys.done)
     /// 튜토리얼을 시작할 페이지. nil이면 보던 페이지부터 (처음 설치했으면 ‘튜토리얼 보기 / 건너뛰기’ 화면).
     /// 기본 화면의 버튼으로 열면 이미 보기로 고른 것이라 바로 1단계부터 연다.
     @State private var tutorialStart: TutorialPage?
+    /// 처음 설치해서 열렸는지, 기본 화면 버튼으로 다시 열었는지 (첫 화면의 건너뛰기 / X가 달라진다)
+    @State private var tutorialEntry: TutorialEntry = .firstRun
     @State private var tutorialTestPassed = false
     @State private var mode: AppMode = .scan
     @State private var scanned: ScannedText?
@@ -48,7 +51,12 @@ struct ContentView: View {
                 .allowsHitTesting(!showTutorial)
                 .accessibilityHidden(showTutorial)
             if showTutorial {
-                TutorialView(start: tutorialStart, testPassed: tutorialTestPassed, onClose: closeTutorial)
+                TutorialView(
+                    start: tutorialStart,
+                    entry: tutorialEntry,
+                    testPassed: tutorialTestPassed,
+                    onClose: closeTutorial
+                )
                     .transition(.asymmetric(
                         insertion: .move(edge: .bottom),
                         removal: .opacity.combined(with: .scale(scale: 1.04))
@@ -103,12 +111,15 @@ struct ContentView: View {
 
     private func openTutorial() {
         tutorialStart = .open
+        tutorialEntry = .revisit(completed: tutorialCompleted)
         tutorialTestPassed = false
         withAnimation(.spring(duration: 0.55, bounce: 0.1)) { showTutorial = true }
     }
 
-    private func closeTutorial() {
+    /// - Parameter completed: 마지막 페이지에서 ‘완료’를 눌렀으면 true (건너뛰기 · 나중에 · X는 false)
+    private func closeTutorial(completed: Bool) {
         tutorialDone = true
+        if completed { tutorialCompleted = true }
         tutorialPage = 0
         withAnimation(.smooth(duration: 0.5)) { showTutorial = false }
     }

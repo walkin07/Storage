@@ -7,6 +7,7 @@ struct ScreenQRApp: App {
         if ProcessInfo.processInfo.arguments.contains("UITEST_RESET") {
             UserDefaults.standard.removeObject(forKey: TutorialKeys.done)
             UserDefaults.standard.removeObject(forKey: TutorialKeys.page)
+            UserDefaults.standard.removeObject(forKey: TutorialKeys.completed)
         }
     }
 

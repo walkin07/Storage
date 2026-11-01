@@ -107,19 +107,7 @@ struct ShortcutMock: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 14)
-        .frame(maxWidth: 300)
-        .background(Color(white: 0.965))
-        .clipShape(.rect(cornerRadius: 34, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.08), radius: 24, y: 12)
-        .environment(\.dynamicTypeSize, .large)
-        .accessibilityHidden(true)
+        .modifier(PhoneScreen())
     }
 
     /// 다이내믹 아일랜드와, 다른 앱에서 돌아오는 ‘◀ Screen QR Scanner’
@@ -434,7 +422,7 @@ struct WelcomeHero: View {
             }
             .frame(maxHeight: .infinity)
             if opened {
-                banner
+                LinkOpenedBanner(text: "링크를 열었어요")
                     .padding(.top, 34)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -478,20 +466,6 @@ struct WelcomeHero: View {
             }
         }
         .frame(width: 84, height: 84)
-    }
-
-    private var banner: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "safari.fill")
-                .foregroundStyle(.blue)
-            Text("링크를 열었어요")
-                .foregroundStyle(.primary)
-        }
-        .font(.system(size: 11, weight: .semibold))
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(.white, in: .capsule)
-        .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
     }
 
     private func play() async {
@@ -569,6 +543,331 @@ struct ViewfinderCorners: Shape {
         path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
         path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - arm))
         return path
+    }
+}
+
+// MARK: - Safari 확장 그림: 설정에서 켜기 → Safari 주소창 메뉴에서 누르기 → 페이지 속 QR이 열림
+
+struct SafariScene: Equatable {
+    /// false: 설정 화면, true: Safari 화면
+    var inSafari = false
+    /// 설정에서 확장을 켰는지
+    var enabled = false
+    /// Safari 주소창 메뉴가 열렸는지
+    var menuOpen = false
+    /// 페이지 속 QR을 찾은 표시
+    var framed = false
+    /// 링크를 연 알림
+    var opened = false
+    // 손가락 표시: 값이 바뀔 때마다 그 자리를 한 번 누른다.
+    var tapToggle = 0
+    var tapMenu = 0
+    var tapExtension = 0
+
+    /// 누른 횟수는 그대로 두고 화면만 처음으로 되돌린다.
+    mutating func reset() {
+        inSafari = false
+        enabled = false
+        menuOpen = false
+        framed = false
+        opened = false
+    }
+
+    /// 움직임 줄이기·UI 테스트용: 주소창 메뉴에서 확장을 고르는 장면
+    static let still = SafariScene(inSafari: true, enabled: true, menuOpen: true)
+}
+
+struct SafariMock: View {
+    let scene: SafariScene
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule()
+                .fill(.black)
+                .frame(width: 44, height: 16)
+                .frame(height: 20)
+                .padding(.bottom, 12)
+            ZStack {
+                if scene.inSafari {
+                    safari
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .opacity
+                        ))
+                } else {
+                    settings
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .modifier(PhoneScreen())
+    }
+
+    /// 설정 → 앱 → Safari → 확장 프로그램
+    private var settings: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 3) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .bold))
+                Text("Safari")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(.blue)
+            Text("확장 프로그램")
+                .font(.system(size: 18, weight: .bold))
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    ExtensionIcon(size: 26)
+                    Text("Screen QR Scanner")
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    MockSwitch(isOn: scene.enabled)
+                        .overlay { TapIndicator(tick: scene.tapToggle) }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                Divider()
+                    .padding(.leading, 48)
+                HStack(spacing: 10) {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.black.opacity(0.06))
+                        .frame(width: 26, height: 26)
+                    Capsule()
+                        .fill(Color.black.opacity(0.06))
+                        .frame(width: 90, height: 8)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+            .background(.white, in: .rect(cornerRadius: 14, style: .continuous))
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 웹 페이지 속 QR + 아래쪽 주소창
+    private var safari: some View {
+        ZStack(alignment: .bottom) {
+            VStack(spacing: 9) {
+                Capsule().fill(Color.black.opacity(0.08)).frame(width: 120, height: 8)
+                Capsule().fill(Color.black.opacity(0.05)).frame(width: 84, height: 8)
+                pageQR.padding(.vertical, 10)
+                Capsule().fill(Color.black.opacity(0.05)).frame(width: 110, height: 8)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.top, 6)
+            VStack(alignment: .leading, spacing: 8) {
+                if scene.menuOpen {
+                    extensionMenu
+                        .transition(
+                            .offset(y: 16)
+                                .combined(with: .opacity)
+                                .combined(with: .scale(scale: 0.95, anchor: .bottomLeading))
+                        )
+                }
+                addressBar
+            }
+        }
+        .overlay(alignment: .top) {
+            if scene.opened {
+                LinkOpenedBanner(text: "새 탭에서 열었어요")
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+    }
+
+    private var pageQR: some View {
+        ZStack {
+            if let image = TutorialView.testQR {
+                Image(uiImage: image)
+                    .interpolation(.none)
+                    .resizable()
+                    .scaledToFit()
+            }
+            ViewfinderCorners()
+                .stroke(Color.black, style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
+                .padding(-7)
+                .scaleEffect(scene.framed ? 1 : 1.25)
+                .opacity(scene.framed ? 1 : 0)
+        }
+        .frame(width: 72, height: 72)
+    }
+
+    private var addressBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "puzzlepiece.extension")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(scene.menuOpen ? Color.blue : Color.primary)
+                .frame(width: 26, height: 26)
+                .overlay { TapIndicator(tick: scene.tapMenu) }
+            Text("example.com")
+                .font(.system(size: 13, weight: .medium))
+            Spacer(minLength: 0)
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 38)
+        .background(.white, in: .capsule)
+        .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
+    }
+
+    private var extensionMenu: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                ExtensionIcon(size: 24)
+                Text("Screen QR Scanner")
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .overlay { TapIndicator(tick: scene.tapExtension) }
+            Divider()
+            HStack(spacing: 10) {
+                Image(systemName: "puzzlepiece.extension")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+                Text("확장 프로그램 관리")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+        .frame(width: 210, alignment: .leading)
+        .background(.white, in: .rect(cornerRadius: 14, style: .continuous))
+        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+    }
+}
+
+/// 그림 속 이 앱의 확장 아이콘
+struct ExtensionIcon: View {
+    let size: CGFloat
+
+    var body: some View {
+        Image(systemName: "qrcode.viewfinder")
+            .font(.system(size: size * 0.46, weight: .semibold))
+            .frame(width: size, height: size)
+            .background(.white, in: .rect(cornerRadius: size * 0.27, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
+                    .strokeBorder(Color.black.opacity(0.1), lineWidth: 1)
+            }
+    }
+}
+
+/// 설정 앱의 켜기/끄기 스위치 모양
+struct MockSwitch: View {
+    let isOn: Bool
+
+    var body: some View {
+        Capsule()
+            .fill(isOn ? Color.green : Color.black.opacity(0.12))
+            .frame(width: 42, height: 26)
+            .overlay(alignment: isOn ? .trailing : .leading) {
+                Circle()
+                    .fill(.white)
+                    .frame(width: 22, height: 22)
+                    .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+                    .padding(2)
+            }
+    }
+}
+
+/// 링크를 열었다는 알림 (그림 속)
+struct LinkOpenedBanner: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "safari.fill")
+                .foregroundStyle(.blue)
+            Text(text)
+                .foregroundStyle(.primary)
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(.white, in: .capsule)
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+    }
+}
+
+/// 그림을 아이폰 화면처럼 감싸는 틀
+struct PhoneScreen: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+            .padding(.bottom, 14)
+            .frame(maxWidth: 300)
+            .background(Color(white: 0.965))
+            .clipShape(.rect(cornerRadius: 34, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 34, style: .continuous)
+                    .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.08), radius: 24, y: 12)
+            .environment(\.dynamicTypeSize, .large)
+            .accessibilityHidden(true)
+    }
+}
+
+// MARK: - 그림 반복의 마지막 장면: 다 했으면 아래 버튼을 누르라는 안내
+
+/// 그림 위를 반투명하게 덮고, 체크가 그려진 뒤 안내와 아래쪽 화살표가 나온다.
+struct NextHintCard: View {
+    let text: String
+    let still: Bool
+
+    @State private var shown: Bool
+
+    init(text: String, still: Bool) {
+        self.text = text
+        self.still = still
+        _shown = State(initialValue: still)
+    }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(Color.green)
+                    .scaleEffect(shown ? 1 : 0.5)
+                    .opacity(shown ? 1 : 0)
+                CheckShape()
+                    .trim(from: 0, to: shown ? 1 : 0)
+                    .stroke(Color.white, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                    .frame(width: 22, height: 17)
+            }
+            .frame(width: 56, height: 56)
+            Text(text)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, 12)
+            // 바로 아래 ‘다음’ 버튼을 가리킨다.
+            Image(systemName: "arrow.down")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(.secondary)
+                .offset(y: shown ? 0 : -10)
+                .opacity(shown ? 1 : 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.regularMaterial, in: .rect(cornerRadius: 34, style: .continuous))
+        .onAppear {
+            guard !still else { return }
+            withAnimation(.spring(duration: 0.55, bounce: 0.4).delay(0.12)) { shown = true }
+        }
     }
 }
 

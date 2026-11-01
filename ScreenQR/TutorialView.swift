@@ -6,6 +6,16 @@ enum TutorialKeys {
     static let done = "tutorial.done"
     /// 보던 페이지 (단축어 앱에 다녀오는 사이 앱이 종료돼도 이어서 보도록)
     static let page = "tutorial.page"
+    /// 마지막 페이지까지 보고 ‘완료’를 누른 적이 있는지 (다시 열면 ‘나중에’ 대신 X)
+    static let completed = "tutorial.completed"
+}
+
+/// 튜토리얼을 어떻게 열었는지
+enum TutorialEntry: Equatable {
+    /// 처음 설치: 첫 화면에 ‘건너뛰기’가 있다.
+    case firstRun
+    /// 기본 화면의 버튼으로 다시 열었다. completed면 예전에 끝까지 보고 완료를 눌렀다.
+    case revisit(completed: Bool)
 }
 
 enum TutorialMotion {
@@ -61,7 +71,7 @@ enum Trigger: String, CaseIterable, Identifiable {
 
 /// 튜토리얼 페이지 순서
 enum TutorialPage: Int, CaseIterable, Identifiable {
-    case welcome, open, screenshot, qr, finish
+    case welcome, open, screenshot, qr, finish, safari
 
     var id: Self { self }
 
@@ -74,7 +84,7 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
         case .open: 1
         case .screenshot: 2
         case .qr: 3
-        case .welcome, .finish: nil
+        case .welcome, .finish, .safari: nil
         }
     }
 
@@ -85,6 +95,7 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
         case .screenshot: "‘스크린샷 찍기’ 넣기"
         case .qr: "‘이미지 속 QR 열기’ 넣기"
         case .finish: "단축어 완성!"
+        case .safari: "Safari에서는 단축어 없이도 돼요"
         }
     }
 
@@ -106,8 +117,26 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
                 Text("‘스크린샷에서\u{00A0}QR\u{00A0}열기’\u{2060}로 이어졌는지 확인해요"),
                 Text("오른쪽 위 완료(\(Image(systemName: "checkmark")))를 누르면 끝!"),
             ]
+        case .safari:
+            [
+                Text("설정 → 앱 → Safari → 확장 프로그램"),
+                Text("‘Screen\u{00A0}QR\u{00A0}Scanner’\u{2060}를 켜요"),
+                Text("Safari 주소창 메뉴에서 ‘Screen\u{00A0}QR\u{00A0}Scanner’\u{2060}를 누르면 보고 있는 페이지의 QR이 열려요"),
+            ]
         case .welcome, .finish:
             []
+        }
+    }
+
+    /// 마지막 페이지 (아래 버튼이 ‘완료’)
+    var isLast: Bool { self == TutorialPage.allCases.last }
+
+    /// 그림 반복의 마지막 장면에 나오는 안내
+    var nextHint: String {
+        switch self {
+        case .qr: "완료까지 눌렀다면 아래 ‘다음’을 눌러 주세요"
+        case .safari: "설정했다면 아래 ‘완료’를 눌러 주세요"
+        default: "다 했다면 아래 ‘다음’을 눌러 주세요"
         }
     }
 }
@@ -119,8 +148,10 @@ struct TutorialView: View {
     static let testPayload = "Screen QR Scanner 테스트 성공!"
     static let testQR: UIImage? = QRGenerator.image(for: testPayload)
 
+    let entry: TutorialEntry
     let testPassed: Bool
-    let onClose: () -> Void
+    /// 닫을 때 부른다. 마지막 페이지에서 ‘완료’를 눌렀으면 true.
+    let onClose: (_ completed: Bool) -> Void
 
     @AppStorage(TutorialKeys.page) private var savedPage = 0
     @State private var page: TutorialPage
@@ -142,12 +173,36 @@ struct TutorialView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// - Parameter start: 시작할 페이지. nil이면 보던 페이지부터 (처음 설치했으면 ‘튜토리얼 보기 / 건너뛰기’ 화면)
-    init(start: TutorialPage?, testPassed: Bool, onClose: @escaping () -> Void) {
+    init(
+        start: TutorialPage?,
+        entry: TutorialEntry,
+        testPassed: Bool,
+        onClose: @escaping (_ completed: Bool) -> Void
+    ) {
         let saved = TutorialPage(rawValue: UserDefaults.standard.integer(forKey: TutorialKeys.page)) ?? .welcome
         _page = State(initialValue: start ?? saved)
+        self.entry = entry
         self.testPassed = testPassed
         self.onClose = onClose
     }
+
+    /// 위쪽 오른쪽 자리에 무엇을 둘지
+    private enum TopTrailing {
+        case hidden, later, close
+    }
+
+    private var topTrailing: TopTrailing {
+        // 처음 설치 화면은 아래 ‘건너뛰기’, 다시 열어서 첫 화면으로 돌아왔으면 X
+        if page == .welcome { return entry == .firstRun ? .hidden : .close }
+        // 마지막 페이지는 아래 ‘완료’로 닫는다.
+        if page.isLast { return .hidden }
+        // 끝까지 보고 완료를 누른 적이 있으면 ‘나중에’ 대신 X
+        if entry == .revisit(completed: true) { return .close }
+        return .later
+    }
+
+    /// 처음 설치했을 때의 첫 화면에만 ‘건너뛰기’가 있다.
+    private var showsSkip: Bool { page == .welcome && entry == .firstRun }
 
     /// 위쪽 점으로 보여 줄 페이지 (첫 화면은 튜토리얼을 볼지 고르는 곳이라 뺀다)
     private static let progressPages = TutorialPage.allCases.filter { $0 != .welcome }
@@ -195,8 +250,7 @@ struct TutorialView: View {
 
     private var topBar: some View {
         // 숨길 때는 아예 만들지 않는다 (보이지 않는 버튼이 VoiceOver에 잡히지 않게). 자리는 그대로 둬서 가운데 점이 흔들리지 않는다.
-        let hidesLater = page == .welcome || page == .finish
-        return HStack(spacing: 0) {
+        HStack(spacing: 0) {
             ZStack(alignment: .leading) {
                 if page != .welcome {
                     Button(action: back) {
@@ -222,10 +276,14 @@ struct TutorialView: View {
             }
             Spacer(minLength: 0)
 
-            // 첫 화면에는 아래에 ‘건너뛰기’가 있고, 마지막 페이지에는 ‘완료’가 있어서 숨긴다.
             ZStack(alignment: .trailing) {
-                if !hidesLater {
-                    Button(action: onClose) {
+                switch topTrailing {
+                case .hidden:
+                    EmptyView()
+                case .later:
+                    Button {
+                        onClose(false)
+                    } label: {
                         Text("나중에")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
@@ -235,6 +293,21 @@ struct TutorialView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("tutorial.later")
                     .transition(.opacity)
+                case .close:
+                    Button {
+                        onClose(false)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(.circle)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("닫기")
+                    .accessibilityIdentifier("tutorial.close")
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
             .frame(width: 84, height: 44, alignment: .trailing)
@@ -263,7 +336,7 @@ struct TutorialView: View {
                 HStack(spacing: 8) {
                     Text(primaryTitle)
                         .contentTransition(.interpolate)
-                    Image(systemName: page == .finish ? "checkmark" : "arrow.right")
+                    Image(systemName: page.isLast ? "checkmark" : "arrow.right")
                         .contentTransition(.symbolEffect(.replace))
                         .symbolEffect(.bounce, value: returnTick)
                 }
@@ -275,9 +348,11 @@ struct TutorialView: View {
             .controlSize(.large)
             .accessibilityIdentifier("tutorial.primary")
 
-            // 처음 화면: 튜토리얼을 볼지 건너뛸지 고른다.
-            if page == .welcome {
-                Button(action: onClose) {
+            // 처음 설치 화면: 튜토리얼을 볼지 건너뛸지 고른다.
+            if showsSkip {
+                Button {
+                    onClose(false)
+                } label: {
                     Text("건너뛰기")
                         .font(.headline)
                         .foregroundStyle(.secondary)
@@ -291,16 +366,13 @@ struct TutorialView: View {
         }
         .padding(.horizontal, 24)
         .padding(.top, 8)
-        .padding(.bottom, page == .welcome ? 4 : 12)
+        .padding(.bottom, showsSkip ? 4 : 12)
         .animation(.smooth(duration: 0.3), value: page)
     }
 
     private var primaryTitle: String {
-        switch page {
-        case .welcome: "단축어 만들기 튜토리얼 보기"
-        case .finish: "완료"
-        default: "다음"
-        }
+        if page == .welcome { return "단축어 만들기 튜토리얼 보기" }
+        return page.isLast ? "완료" : "다음"
     }
 
     // MARK: 페이지
@@ -324,6 +396,8 @@ struct TutorialView: View {
                         )
                     case .finish:
                         FinishPage(trigger: $trigger, testPassed: testPassed, still: still)
+                    case .safari:
+                        SafariPage(still: still, compact: compact)
                     }
                 }
                 .padding(.horizontal, 24)
@@ -343,8 +417,8 @@ struct TutorialView: View {
     // MARK: 동작
 
     private func primaryAction() {
-        if page == .finish {
-            onClose()
+        if page.isLast {
+            onClose(true)
         } else if let next = TutorialPage(rawValue: page.rawValue + 1) {
             go(to: next)
         }
@@ -451,6 +525,8 @@ private struct StepPage: View {
     @State private var scene: MockScene
     /// 그림이 지금 보여 주는 설명 줄 (nil이면 모두 보통 글씨)
     @State private var activeLine: Int?
+    /// 그림 반복의 마지막 장면: ‘다 했다면 아래 다음을 눌러 주세요’
+    @State private var showHint: Bool
 
     init(
         page: TutorialPage,
@@ -468,12 +544,21 @@ private struct StepPage: View {
         self.onOpenShortcuts = onOpenShortcuts
         _scene = State(initialValue: still ? MockScene.still(for: page) : MockScene.start(for: page))
         _activeLine = State(initialValue: still ? nil : 0)
+        _showHint = State(initialValue: still && returned)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: compact ? 18 : 24) {
             ShortcutMock(scene: scene, showsBackLink: page == .open, still: still)
                 .frame(height: compact ? 236 : 290)
+                .overlay {
+                    if showHint {
+                        NextHintCard(text: page.nextHint, still: still)
+                            .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                            // 반복 중에 잠깐 나오는 장면은 그림의 일부라 VoiceOver에는 단축어 앱에 다녀온 뒤에만 알린다.
+                            .accessibilityHidden(!returned)
+                    }
+                }
                 .frame(maxWidth: .infinity)
             VStack(alignment: .leading, spacing: 6) {
                 Text("\(page.stepNumber ?? 1) / \(TutorialPage.stepCount) 단계")
@@ -506,21 +591,9 @@ private struct StepPage: View {
                 }
                 .transition(.opacity)
             }
-            if returned {
-                Label {
-                    Text(page == .qr ? "완료까지 눌렀다면 아래 ‘다음’을 눌러 주세요" : "다 했다면 아래 ‘다음’을 눌러 주세요")
-                } icon: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                }
-                .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.green.opacity(0.1), in: .capsule)
-                .transition(.scale(scale: 0.9, anchor: .topLeading).combined(with: .opacity))
-            }
         }
-        .task { await play() }
+        // 단축어 앱에서 돌아오면(returned) 처음부터 다시: 안내 장면부터 보여 준다.
+        .task(id: returned) { await play() }
     }
 
     private func style(for index: Int) -> StepRowStyle {
@@ -531,16 +604,44 @@ private struct StepPage: View {
     // MARK: 그림 애니메이션 (페이지를 넘기면 멈춘다)
 
     private func play() async {
-        guard !still else { return }
+        if still {
+            // 움직임 줄이기: 단축어 앱에 다녀왔을 때만 안내를 그대로 띄워 둔다.
+            withAnimation(.smooth(duration: 0.3)) { showHint = returned }
+            return
+        }
+        if returned {
+            guard await showNextHint(thenReset: resetToStart) else { return }
+        }
         switch page {
         case .open: await playOpen()
         case .screenshot: await playScreenshot()
         case .qr: await playQR()
-        case .welcome, .finish: break
+        case .welcome, .finish, .safari: break
         }
     }
 
-    /// 이 앱에서 ‘단축어 앱 열기’ → 새 단축어 → 왼쪽 위로 돌아오기
+    /// 반복의 첫 장면으로 (누른 횟수는 그대로)
+    private func resetToStart() {
+        switch page {
+        case .open: scene.inShortcuts = false
+        case .screenshot: scene.reset(blocks: 0)
+        case .qr: scene.reset(blocks: 1)
+        case .welcome, .finish, .safari: break
+        }
+        activeLine = 0
+    }
+
+    /// 마지막 장면: ‘다음’ 안내를 띄우고, 안내가 덮고 있는 동안 그림을 첫 장면으로 되돌린 뒤 걷어 낸다.
+    private func showNextHint(thenReset reset: () -> Void) async -> Bool {
+        withAnimation(.spring(duration: 0.45, bounce: 0.2)) { showHint = true }
+        guard await tutorialPause(1300) else { return false }
+        reset()
+        guard await tutorialPause(1300) else { return false }
+        withAnimation(.smooth(duration: 0.35)) { showHint = false }
+        return await tutorialPause(450)
+    }
+
+    /// 이 앱에서 ‘단축어 앱 열기’ → 새 단축어 → 왼쪽 위로 돌아오기 → 안내
     private func playOpen() async {
         while !Task.isCancelled {
             withAnimation(.smooth(duration: 0.3)) { activeLine = 0 }
@@ -555,16 +656,14 @@ private struct StepPage: View {
             guard await tutorialPause(380) else { return }
             withAnimation(.smooth(duration: 0.45)) { scene.inShortcuts = false }
             guard await tutorialPause(700) else { return }
+            guard await showNextHint(thenReset: resetToStart) else { return }
         }
     }
 
-    /// 동작 검색 → ‘스크린샷’ 입력 → ‘스크린샷 찍기’ 추가
+    /// 동작 검색 → ‘스크린샷’ 입력 → ‘스크린샷 찍기’ 추가 → 안내
     private func playScreenshot() async {
         while !Task.isCancelled {
-            withAnimation(.smooth(duration: 0.35)) {
-                scene.reset(blocks: 0)
-                activeLine = 0
-            }
+            withAnimation(.smooth(duration: 0.3)) { activeLine = 0 }
             guard await tutorialPause(900) else { return }
             scene.tapSearch += 1
             guard await tutorialPause(250) else { return }
@@ -586,17 +685,15 @@ private struct StepPage: View {
                 scene.searching = false
                 scene.blocks = 1
             }
-            guard await tutorialPause(2200) else { return }
+            guard await tutorialPause(1600) else { return }
+            guard await showNextHint(thenReset: resetToStart) else { return }
         }
     }
 
-    /// ‘QR’ 입력 → ‘이미지 속 QR 열기’ 추가(스크린샷이 이어짐) → 완료
+    /// ‘QR’ 입력 → ‘이미지 속 QR 열기’ 추가(스크린샷이 이어짐) → 완료 → 안내
     private func playQR() async {
         while !Task.isCancelled {
-            withAnimation(.smooth(duration: 0.35)) {
-                scene.reset(blocks: 1)
-                activeLine = 0
-            }
+            withAnimation(.smooth(duration: 0.3)) { activeLine = 0 }
             guard await tutorialPause(900) else { return }
             scene.tapSearch += 1
             guard await tutorialPause(250) else { return }
@@ -624,7 +721,8 @@ private struct StepPage: View {
             scene.tapDone += 1
             guard await tutorialPause(200) else { return }
             withAnimation(.smooth(duration: 0.25)) { scene.doneLit = true }
-            guard await tutorialPause(1500) else { return }
+            guard await tutorialPause(1300) else { return }
+            guard await showNextHint(thenReset: resetToStart) else { return }
         }
     }
 }
@@ -684,7 +782,7 @@ private struct AttentionRing: View {
     }
 }
 
-// MARK: - 마지막 페이지: 실행 방법 고르기 + Safari 확장
+// MARK: - 단축어 완성: 실행 방법 고르기 (+ 시험용 QR)
 
 private struct FinishPage: View {
     @Binding var trigger: Trigger
@@ -704,7 +802,6 @@ private struct FinishPage: View {
             }
             .padding(.top, 8)
             triggerCard
-            safariCard
         }
     }
 
@@ -745,31 +842,107 @@ private struct FinishPage: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassEffect(.regular, in: .rect(cornerRadius: 28))
     }
+}
 
-    private var safariCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                Image(systemName: "safari")
-                    .font(.system(size: 22, weight: .medium))
-                    .frame(width: 46, height: 46)
-                    .glassEffect(.regular, in: .circle)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Safari 확장 프로그램")
-                        .font(.title3.weight(.semibold))
-                    Text("Safari에서는 단축어 없이도 돼요")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+// MARK: - 마지막 페이지: Safari 확장 프로그램
+
+/// Safari에서는 단축어 없이 확장 프로그램으로 연다. 놓치지 않게 따로 한 페이지로 보여 준다.
+private struct SafariPage: View {
+    let still: Bool
+    let compact: Bool
+
+    @State private var scene: SafariScene
+    /// 그림이 지금 보여 주는 설명 줄 (nil이면 모두 보통 글씨)
+    @State private var activeLine: Int?
+    /// 그림 반복의 마지막 장면: ‘설정했다면 아래 완료를 눌러 주세요’
+    @State private var showHint = false
+
+    init(still: Bool, compact: Bool) {
+        self.still = still
+        self.compact = compact
+        _scene = State(initialValue: still ? SafariScene.still : SafariScene())
+        _activeLine = State(initialValue: still ? nil : 0)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: compact ? 18 : 24) {
+            SafariMock(scene: scene)
+                .frame(height: compact ? 236 : 290)
+                .overlay {
+                    if showHint {
+                        NextHintCard(text: TutorialPage.safari.nextHint, still: still)
+                            .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                            .accessibilityHidden(true)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Safari 확장 프로그램")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(TutorialPage.safari.title)
+                    .font(.title2.bold())
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(Array(TutorialPage.safari.lines.enumerated()), id: \.offset) { index, line in
+                    TutorialStepRow(number: index + 1, text: line, style: style(for: index))
                 }
             }
-            VStack(alignment: .leading, spacing: 12) {
-                TutorialStepRow(number: 1, text: Text("설정 → 앱 → Safari → 확장 프로그램"))
-                TutorialStepRow(number: 2, text: Text("‘Screen\u{00A0}QR\u{00A0}Scanner’\u{2060}를 켜요"))
-                TutorialStepRow(number: 3, text: Text("Safari 주소창의 메뉴에서 ‘Screen\u{00A0}QR\u{00A0}Scanner’\u{2060}를 누르면 보고 있는 페이지의 QR이 열려요"))
-            }
+            Label("Safari 확장은 Safari에서만 동작해요. 다른 앱에서는 방금 만든 단축어를 쓰세요.", systemImage: "info.circle")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.black.opacity(0.04), in: .rect(cornerRadius: 18, style: .continuous))
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 28))
+        .task { await play() }
+    }
+
+    private func style(for index: Int) -> StepRowStyle {
+        guard let activeLine else { return .plain }
+        return index == activeLine ? .active : .dimmed
+    }
+
+    /// 설정에서 켜기 → Safari 주소창 메뉴 → ‘Screen QR Scanner’ → 페이지 속 QR이 열림
+    private func play() async {
+        guard !still else { return }
+        while !Task.isCancelled {
+            withAnimation(.smooth(duration: 0.3)) { activeLine = 0 }
+            guard await tutorialPause(1100) else { return }
+            withAnimation(.smooth(duration: 0.3)) { activeLine = 1 }
+            guard await tutorialPause(450) else { return }
+            scene.tapToggle += 1
+            guard await tutorialPause(220) else { return }
+            withAnimation(.spring(duration: 0.35, bounce: 0.25)) { scene.enabled = true }
+            guard await tutorialPause(1100) else { return }
+            withAnimation(.spring(duration: 0.55, bounce: 0.15)) {
+                scene.inSafari = true
+                activeLine = 2
+            }
+            guard await tutorialPause(1000) else { return }
+            scene.tapMenu += 1
+            guard await tutorialPause(300) else { return }
+            withAnimation(.spring(duration: 0.4, bounce: 0.2)) { scene.menuOpen = true }
+            guard await tutorialPause(900) else { return }
+            scene.tapExtension += 1
+            guard await tutorialPause(320) else { return }
+            withAnimation(.smooth(duration: 0.25)) { scene.menuOpen = false }
+            withAnimation(.spring(duration: 0.4, bounce: 0.35).delay(0.15)) { scene.framed = true }
+            guard await tutorialPause(800) else { return }
+            withAnimation(.spring(duration: 0.55, bounce: 0.3)) { scene.opened = true }
+            guard await tutorialPause(1600) else { return }
+            // 마지막 장면: ‘완료’ 안내. 안내가 덮고 있는 동안 첫 장면(설정 화면)으로 되돌린다.
+            withAnimation(.spring(duration: 0.45, bounce: 0.2)) { showHint = true }
+            guard await tutorialPause(1300) else { return }
+            scene.reset()
+            activeLine = 0
+            guard await tutorialPause(1300) else { return }
+            withAnimation(.smooth(duration: 0.35)) { showHint = false }
+            guard await tutorialPause(450) else { return }
+        }
     }
 }
 
