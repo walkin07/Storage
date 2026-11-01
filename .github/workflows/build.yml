@@ -2,14 +2,19 @@ name: Build
 
 on:
   # 게임덱(GameDeck/)만 바뀐 push에서는 화면 QR을 다시 빌드·배포하지 않는다 (gamedeck.yml이 따로 빌드).
+  # 앱 스토어 이미지(AppStore/, appstore.yml)만 바뀐 push도 앱을 다시 빌드·배포하지 않는다.
   push:
     paths-ignore:
       - "GameDeck/**"
       - ".github/workflows/gamedeck.yml"
+      - "AppStore/**"
+      - ".github/workflows/appstore.yml"
   pull_request:
     paths-ignore:
       - "GameDeck/**"
       - ".github/workflows/gamedeck.yml"
+      - "AppStore/**"
+      - ".github/workflows/appstore.yml"
   workflow_dispatch:
 
 jobs:
@@ -91,8 +96,10 @@ jobs:
       - name: UI test
         run: |
           set -o pipefail
+          # 앱 스토어 이미지용 촬영(AppStoreScreenshots)은 appstore.yml에서 6.9형 시뮬레이터로 따로 한다.
           xcodebuild test -project ScreenQR.xcodeproj -scheme ScreenQR \
             -destination "id=$UDID" -resultBundlePath UITests.xcresult \
+            -skip-testing:ScreenQRUITests/AppStoreScreenshots \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
           grep -q "\*\* TEST SUCCEEDED \*\*" test.log
       - name: Show test errors

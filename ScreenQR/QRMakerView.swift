@@ -51,7 +51,7 @@ enum QRGenerator {
 
 /// 링크를 넣으면 바로 QR 코드를 보여 주고, 공유 · 사진 저장 · 복사를 할 수 있다.
 struct QRMakerView: View {
-    @State private var input = ""
+    @State private var input = uiTestDefault("uitest.makeInput") ?? ""
     @State private var message: String?
     @State private var doneTick = 0
     @State private var tapTick = 0

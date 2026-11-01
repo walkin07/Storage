@@ -1,5 +1,15 @@
 import SwiftUI
 
+/// UI 테스트(앱 스토어 스크린샷)에서 처음 상태를 정할 때만 쓰는 값 (예: -uitest.mode make).
+/// 배포(Release) 빌드에서는 늘 nil이라 앱 동작에 영향이 없다.
+func uiTestDefault(_ key: String) -> String? {
+    #if DEBUG
+    return UserDefaults.standard.string(forKey: key)
+    #else
+    return nil
+    #endif
+}
+
 @main
 struct ScreenQRApp: App {
     init() {

@@ -162,6 +162,8 @@ struct TutorialView: View {
     @State private var createdShortcut = false
     @State private var awaitingReturn = false
     @State private var leftApp = false
+    /// Safari 페이지를 보다가 앱 밖(설정 등)에 나갔는지
+    @State private var leftFromSafari = false
     @State private var returnedPages: Set<TutorialPage> = []
     @State private var failedPage: TutorialPage?
     @State private var openTick = 0
@@ -220,14 +222,8 @@ struct TutorialView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             bottomBar
         }
-        .background {
-            LinearGradient(
-                colors: [Color(white: 0.95), .white],
-                startPoint: .top,
-                endPoint: UnitPoint(x: 0.5, y: 0.45)
-            )
-            .ignoresSafeArea()
-        }
+        // 위쪽 막대(뒤로·X)와 그 아래 내용이 같은 색으로 이어지도록 한 가지 흰색 (기본 화면과도 같다)
+        .background(Color.white.ignoresSafeArea())
         .onChange(of: page) { _, new in
             savedPage = new.rawValue
         }
@@ -397,7 +393,7 @@ struct TutorialView: View {
                     case .finish:
                         FinishPage(trigger: $trigger, testPassed: testPassed, still: still)
                     case .safari:
-                        SafariPage(still: still, compact: compact)
+                        SafariPage(still: still, compact: compact, returned: returnedPages.contains(.safari))
                     }
                 }
                 .padding(.horizontal, 24)
@@ -460,12 +456,22 @@ struct TutorialView: View {
         }
     }
 
-    /// 단축어 앱에 다녀오면 ‘다음’ 버튼을 살짝 튕기고 안내를 띄운다.
+    /// 단축어 앱에 다녀오면(Safari 페이지는 설정 등 앱 밖에 다녀오면) ‘다음’ 버튼을 살짝 튕기고 안내를 띄운다.
     private func handle(_ phase: ScenePhase) {
         switch phase {
         case .background:
             if awaitingReturn { leftApp = true }
+            if page == .safari { leftFromSafari = true }
         case .active:
+            if leftFromSafari {
+                leftFromSafari = false
+                if page == .safari {
+                    withAnimation(.spring(duration: 0.5, bounce: 0.3)) {
+                        _ = returnedPages.insert(.safari)
+                    }
+                    returnTick += 1
+                }
+            }
             guard awaitingReturn, leftApp else { return }
             awaitingReturn = false
             leftApp = false
@@ -597,6 +603,8 @@ private struct StepPage: View {
     }
 
     private func style(for index: Int) -> StepRowStyle {
+        // ‘다음’ 안내가 나오는 동안은 어느 줄도 가리키지 않는다 (번호 아이콘 모두 꺼짐).
+        if showHint && !still { return .dimmed }
         guard let activeLine else { return .plain }
         return index == activeLine ? .active : .dimmed
     }
@@ -631,6 +639,15 @@ private struct StepPage: View {
         activeLine = 0
     }
 
+    /// 한 바퀴의 끝. 단축어 앱에 다녀온 뒤에는 ‘다음’ 안내를 보여 주고, 그 전에는 바로 첫 장면으로 되돌린다.
+    private func finishLoop() async -> Bool {
+        if returned {
+            return await showNextHint(thenReset: resetToStart)
+        }
+        withAnimation(.smooth(duration: 0.35)) { resetToStart() }
+        return await tutorialPause(450)
+    }
+
     /// 마지막 장면: ‘다음’ 안내를 띄우고, 안내가 덮고 있는 동안 그림을 첫 장면으로 되돌린 뒤 걷어 낸다.
     private func showNextHint(thenReset reset: () -> Void) async -> Bool {
         withAnimation(.spring(duration: 0.45, bounce: 0.2)) { showHint = true }
@@ -641,7 +658,7 @@ private struct StepPage: View {
         return await tutorialPause(450)
     }
 
-    /// 이 앱에서 ‘단축어 앱 열기’ → 새 단축어 → 왼쪽 위로 돌아오기 → 안내
+    /// 이 앱에서 ‘단축어 앱 열기’ → 새 단축어 → 왼쪽 위로 돌아오기 (→ 다녀온 뒤에는 안내)
     private func playOpen() async {
         while !Task.isCancelled {
             withAnimation(.smooth(duration: 0.3)) { activeLine = 0 }
@@ -656,11 +673,11 @@ private struct StepPage: View {
             guard await tutorialPause(380) else { return }
             withAnimation(.smooth(duration: 0.45)) { scene.inShortcuts = false }
             guard await tutorialPause(700) else { return }
-            guard await showNextHint(thenReset: resetToStart) else { return }
+            guard await finishLoop() else { return }
         }
     }
 
-    /// 동작 검색 → ‘스크린샷’ 입력 → ‘스크린샷 찍기’ 추가 → 안내
+    /// 동작 검색 → ‘스크린샷’ 입력 → ‘스크린샷 찍기’ 추가 (→ 다녀온 뒤에는 안내)
     private func playScreenshot() async {
         while !Task.isCancelled {
             withAnimation(.smooth(duration: 0.3)) { activeLine = 0 }
@@ -686,11 +703,11 @@ private struct StepPage: View {
                 scene.blocks = 1
             }
             guard await tutorialPause(1600) else { return }
-            guard await showNextHint(thenReset: resetToStart) else { return }
+            guard await finishLoop() else { return }
         }
     }
 
-    /// ‘QR’ 입력 → ‘이미지 속 QR 열기’ 추가(스크린샷이 이어짐) → 완료 → 안내
+    /// ‘QR’ 입력 → ‘이미지 속 QR 열기’ 추가(스크린샷이 이어짐) → 완료 (→ 다녀온 뒤에는 안내)
     private func playQR() async {
         while !Task.isCancelled {
             withAnimation(.smooth(duration: 0.3)) { activeLine = 0 }
@@ -722,7 +739,7 @@ private struct StepPage: View {
             guard await tutorialPause(200) else { return }
             withAnimation(.smooth(duration: 0.25)) { scene.doneLit = true }
             guard await tutorialPause(1300) else { return }
-            guard await showNextHint(thenReset: resetToStart) else { return }
+            guard await finishLoop() else { return }
         }
     }
 }
@@ -850,18 +867,22 @@ private struct FinishPage: View {
 private struct SafariPage: View {
     let still: Bool
     let compact: Bool
+    /// 이 페이지를 보다가 앱 밖(설정 등)에 다녀왔는지. 그때부터 그림 끝에 ‘완료’ 안내가 나온다.
+    let returned: Bool
 
     @State private var scene: SafariScene
     /// 그림이 지금 보여 주는 설명 줄 (nil이면 모두 보통 글씨)
     @State private var activeLine: Int?
     /// 그림 반복의 마지막 장면: ‘설정했다면 아래 완료를 눌러 주세요’
-    @State private var showHint = false
+    @State private var showHint: Bool
 
-    init(still: Bool, compact: Bool) {
+    init(still: Bool, compact: Bool, returned: Bool) {
         self.still = still
         self.compact = compact
+        self.returned = returned
         _scene = State(initialValue: still ? SafariScene.still : SafariScene())
         _activeLine = State(initialValue: still ? nil : 0)
+        _showHint = State(initialValue: still && returned)
     }
 
     var body: some View {
@@ -872,7 +893,7 @@ private struct SafariPage: View {
                     if showHint {
                         NextHintCard(text: TutorialPage.safari.nextHint, still: still)
                             .transition(.opacity.combined(with: .scale(scale: 0.97)))
-                            .accessibilityHidden(true)
+                            .accessibilityHidden(!returned)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -898,17 +919,52 @@ private struct SafariPage: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.black.opacity(0.04), in: .rect(cornerRadius: 18, style: .continuous))
         }
-        .task { await play() }
+        // 앱 밖에 다녀오면(returned) 처음부터 다시: 안내 장면부터 보여 준다.
+        .task(id: returned) { await play() }
     }
 
     private func style(for index: Int) -> StepRowStyle {
+        // ‘완료’ 안내가 나오는 동안은 어느 줄도 가리키지 않는다.
+        if showHint && !still { return .dimmed }
         guard let activeLine else { return .plain }
         return index == activeLine ? .active : .dimmed
     }
 
-    /// 설정에서 켜기 → Safari 주소창 메뉴 → ‘Screen QR Scanner’ → 페이지 속 QR이 열림
+    /// 첫 장면(설정 화면)으로 (누른 횟수는 그대로)
+    private func resetToStart() {
+        scene.reset()
+        activeLine = 0
+    }
+
+    /// 한 바퀴의 끝. 앱 밖에 다녀온 뒤에는 ‘완료’ 안내를 보여 주고(덮고 있는 동안 첫 장면으로), 그 전에는 바로 첫 장면으로.
+    private func finishLoop() async -> Bool {
+        if returned {
+            withAnimation(.spring(duration: 0.45, bounce: 0.2)) { showHint = true }
+            guard await tutorialPause(1300) else { return false }
+            resetToStart()
+            guard await tutorialPause(1300) else { return false }
+            withAnimation(.smooth(duration: 0.35)) { showHint = false }
+            return await tutorialPause(450)
+        }
+        withAnimation(.smooth(duration: 0.35)) { resetToStart() }
+        return await tutorialPause(450)
+    }
+
+    /// 설정에서 켜기 → Safari 주소창 메뉴 → ‘Screen QR Scanner’ → 페이지 속 QR이 열림 (→ 다녀온 뒤에는 안내)
     private func play() async {
-        guard !still else { return }
+        if still {
+            withAnimation(.smooth(duration: 0.3)) { showHint = returned }
+            return
+        }
+        if returned {
+            // 앱에 돌아오자마자 안내부터
+            withAnimation(.spring(duration: 0.45, bounce: 0.2)) { showHint = true }
+            guard await tutorialPause(1300) else { return }
+            resetToStart()
+            guard await tutorialPause(1300) else { return }
+            withAnimation(.smooth(duration: 0.35)) { showHint = false }
+            guard await tutorialPause(450) else { return }
+        }
         while !Task.isCancelled {
             withAnimation(.smooth(duration: 0.3)) { activeLine = 0 }
             guard await tutorialPause(1100) else { return }
@@ -934,14 +990,7 @@ private struct SafariPage: View {
             guard await tutorialPause(800) else { return }
             withAnimation(.spring(duration: 0.55, bounce: 0.3)) { scene.opened = true }
             guard await tutorialPause(1600) else { return }
-            // 마지막 장면: ‘완료’ 안내. 안내가 덮고 있는 동안 첫 장면(설정 화면)으로 되돌린다.
-            withAnimation(.spring(duration: 0.45, bounce: 0.2)) { showHint = true }
-            guard await tutorialPause(1300) else { return }
-            scene.reset()
-            activeLine = 0
-            guard await tutorialPause(1300) else { return }
-            withAnimation(.smooth(duration: 0.35)) { showHint = false }
-            guard await tutorialPause(450) else { return }
+            guard await finishLoop() else { return }
         }
     }
 }

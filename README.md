@@ -102,6 +102,15 @@ TestFlight 빌드는 90일 동안 쓸 수 있고, 새로 push하면 자동으로
 - **공유**(메시지·카톡 등으로 보내기), **저장**(사진 앱, 처음 한 번 저장 허용), **복사**(다른 앱에 붙여넣기)
 - QR 코드는 아이폰 안에서 만들어지고, 넣은 내용은 어디에도 보내지 않습니다.
 
+## 앱 스토어 이미지
+
+GitHub의 **Releases → screenqr-appstore**에 앱 스토어용 이미지가 올라갑니다.
+
+- `screenshot-1` ~ `screenshot-6`: 1320×2868 (6.9형 iPhone). App Store Connect의 스크린샷에 순서대로 올리면 검색 결과에는 앞의 3장이 나옵니다.
+- `header-1920x1080`: 헤더/홍보 이미지 (인앱 이벤트 카드, 피처링 요청, 웹·SNS 등)
+
+실제 앱 화면을 6.9형 시뮬레이터에서 찍어(9:41 상태 막대) 문구와 기기 틀을 입힌 것입니다. 문구는 `AppStore/compose.py`의 `SHOTS`에서 고치고, Actions 탭의 **App Store images** 워크플로를 실행하면 다시 만들어집니다.
+
 ## 브라우저 확장 설치
 
 ### Chrome · Edge · 웨일 · Brave · Opera · Vivaldi (PC)
@@ -134,6 +143,7 @@ Chrome 웹 스토어(1회 $5)나 Edge 부가 기능(무료)에 올리면 개발�
 - `browser-extension/`: Chrome/Edge/Firefox 등 공용 확장 (Manifest V3, ZXing WASM으로 인식)
   - `vendor/zxing-reader.js`, `vendor/zxing_reader.wasm`: [zxing-wasm](https://github.com/Sec-ant/zxing-wasm) 3.1.5 (MIT)
 - `.github/workflows/build.yml`: iOS 앱 빌드(서명 없는 IPA), 시뮬레이터 UI 테스트, 확장 검사·패키징, Releases 업로드, TestFlight 업로드
+- `.github/workflows/appstore.yml`, `AppStore/compose.py`: 앱 스토어 이미지 만들기
 - 직접 Xcode로 빌드하려면: `brew install xcodegen && xcodegen generate` 후 두 타깃 모두 Team 선택 (iOS 26, Xcode 26 이상)
 
 ## 다른 앱

@@ -40,7 +40,7 @@ struct ContentView: View {
     /// 처음 설치해서 열렸는지, 기본 화면 버튼으로 다시 열었는지 (첫 화면의 건너뛰기 / X가 달라진다)
     @State private var tutorialEntry: TutorialEntry = .firstRun
     @State private var tutorialTestPassed = false
-    @State private var mode: AppMode = .scan
+    @State private var mode: AppMode = AppMode(rawValue: uiTestDefault("uitest.mode") ?? "") ?? .scan
     @State private var scanned: ScannedText?
     /// 같은 QR 내용이 앱 안 전달과 URL로 두 번 올 수 있어서, 잠깐 사이에 같은 내용은 한 번만 처리한다.
     @State private var lastReceived: (text: String, at: Date)?
