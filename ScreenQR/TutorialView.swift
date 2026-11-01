@@ -63,6 +63,7 @@ enum Trigger: String, CaseIterable, Identifiable {
             [
                 "제어 센터를 열고 왼쪽 위 ＋를 눌러요",
                 "‘컨트롤 추가’에서 ‘단축어’를 넣고, 방금 만든 단축어를 골라요",
+                "단축어 앱에서 그 단축어에 ‘대기’(1초)를 넣고 맨 위로 옮겨요. 제어 센터가 닫힌 뒤에 찍혀요",
                 "제어 센터에서 한 번 누르면 실행돼요",
             ]
         }
@@ -671,15 +672,16 @@ private struct StepPage: View {
     private func playOpen() async {
         while !Task.isCancelled {
             withAnimation(.smooth(duration: 0.3)) { activeLine = 0 }
-            guard await tutorialPause(900) else { return }
+            guard await tutorialPause(1000) else { return }
             scene.tapOpen += 1
-            guard await tutorialPause(380) else { return }
+            guard await tutorialPause(400) else { return }
             withAnimation(.spring(duration: 0.55, bounce: 0.18)) { scene.inShortcuts = true }
-            guard await tutorialPause(1500) else { return }
+            guard await tutorialPause(1300) else { return }
+            // 2번 설명: 새 단축어 화면에서 왼쪽 위 ◀를 누르기까지 충분히 보여 준다.
             withAnimation(.smooth(duration: 0.3)) { activeLine = 1 }
-            guard await tutorialPause(900) else { return }
+            guard await tutorialPause(1700) else { return }
             scene.tapBack += 1
-            guard await tutorialPause(380) else { return }
+            guard await tutorialPause(700) else { return }
             // ◀로 이 앱에 돌아온 화면이 곧 첫 장면이라, 돌아오는 순간 1번 아이콘도 함께 켜진다.
             guard await finishLoop() else { return }
         }
