@@ -43,11 +43,40 @@ GitHub의 **Releases → gamedeck-latest**에 항상 최신 빌드가 올라갑�
 
 ## 설치 순서
 
-1. **게임덱 설치**: 화면 QR과 같은 방법으로 Sideloadly에 `GameDeck-unsigned.ipa`를 넣어 설치합니다 ([저장소 README의 ‘아이폰에 설치’](../README.md#아이폰에-설치-mac-없이)).
+1. **게임덱 설치**: 아래 [게임덱 설치하기](#게임덱-설치하기) 중 하나로 설치합니다.
    - 무료 Apple ID는 사이드로드 앱이 3개까지입니다. 엔진이 여러 개면 **LiveContainer 하나에 엔진들을 넣는** 방법을 권장합니다. 게임덱 자체는 LiveContainer 밖에 설치하세요 (그래야 링크와 설치 확인이 정확합니다).
 2. **JIT 준비** (MeloNX · Madeira · iDeck · Playport를 쓸 때): App Store에서 LocalDevVPN을 받고, StikDebug를 설치한 뒤 PC에서 [페어링 파일](https://github.com/StikDebug/StikDebug-Guide/blob/main/pairing_file.md)을 한 번 만들어 넣습니다.
 3. **엔진 설치**: 위 표의 각 공식 페이지 안내를 따릅니다. MeloNX는 메모리 한도 늘리기(Increased Memory Limit)를 켜고 설치하세요.
 4. **게임덱에 게임 추가** (아래) → 플레이.
+
+## 게임덱 설치하기
+
+### 방법 A: Apple 개발자 계정 + TestFlight (PC 필요 없음, 추천)
+
+push할 때마다 GitHub Actions가 빌드·서명해서 TestFlight에 올립니다. 아이폰의 **TestFlight** 앱에서 설치·업데이트하고, 7일마다 다시 설치할 필요가 없습니다. 화면 QR과 같은 시크릿을 씁니다.
+
+한 번만 준비하면 됩니다:
+
+1. [developer.apple.com → Identifiers → +](https://developer.apple.com/account/resources/identifiers/list) → App IDs → App → Bundle ID(Explicit)에 `io.github.walkin07.gamedeck` 등록
+   - 다른 ID를 쓰려면 GitHub 저장소 변수 `GAMEDECK_BUNDLE_ID`에 넣으세요.
+2. [App Store Connect → 앱 → +](https://appstoreconnect.apple.com/apps) → 신규 앱: 플랫폼 iOS, 이름은 App Store에서 겹치지 않는 아무 이름(예: `게임덱 개인용`), 기본 언어 한국어, 번들 ID는 1번에서 등록한 것, SKU는 아무거나
+3. App Store Connect → 사용자 및 액세스 → 통합 → App Store Connect API → **팀 키 생성** (액세스: **관리자**)
+   - Issuer ID, 키 ID를 적어 두고 `.p8` 파일을 받습니다 (한 번만 받을 수 있음). 화면 QR용으로 이미 만들었다면 그대로 씁니다.
+4. GitHub 저장소 → Settings → Secrets and variables → Actions → **New repository secret** 4개 (화면 QR과 공용)
+   | 이름 | 값 |
+   |---|---|
+   | `APPLE_TEAM_ID` | developer.apple.com → 멤버십 세부 사항의 팀 ID |
+   | `ASC_KEY_ID` | 키 ID |
+   | `ASC_ISSUER_ID` | Issuer ID |
+   | `ASC_KEY_P8` | `.p8` 파일을 메모장으로 열어 `-----BEGIN`부터 `END-----`까지 전부 |
+5. Actions 탭에서 GameDeck 워크플로를 다시 실행하거나 `GameDeck/`을 바꿔 push → 10~30분 뒤 App Store Connect의 TestFlight에 빌드가 나타납니다.
+6. App Store Connect → 이 앱 → TestFlight → 내부 테스트 그룹을 만들고 본인을 추가 → 아이폰에서 TestFlight 앱으로 설치
+
+> 시크릿 4개를 넣으면 화면 QR도 TestFlight에 올라가려고 합니다. 화면 QR까지 받으려면 [화면 QR의 1~2단계](../README.md#방법-b-apple-개발자-계정--testflight-pc-필요-없음-추천)(App ID 2개와 앱 등록)도 해 두세요. 안 하면 화면 QR이 바뀐 push에서 화면 QR의 TestFlight 단계만 실패로 표시됩니다.
+
+### 방법 B: Windows PC + Sideloadly
+
+화면 QR과 같은 방법으로 Sideloadly에 `GameDeck-unsigned.ipa`를 넣어 설치합니다 ([저장소 README의 ‘아이폰에 설치’](../README.md#아이폰에-설치-mac-없이)). 무료 Apple ID는 7일마다 다시 설치해야 하고, 개발자 계정으로 서명하면 1년 동안 쓸 수 있습니다.
 
 ## 게임 추가 (+ 버튼)
 

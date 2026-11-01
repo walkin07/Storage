@@ -165,3 +165,69 @@ jobs:
           gh release create gamedeck-latest dist/GameDeck-unsigned.ipa --target "$GITHUB_SHA" --prerelease \
             --title "게임덱 (최신 빌드)" \
             --notes "GameDeck-unsigned.ipa: Sideloadly · SideStore · LiveContainer 등으로 아이폰에 설치하세요. 사용법은 저장소의 GameDeck/README.md에 있어요."
+
+  # Apple 개발자 계정 시크릿이 있으면 서명해서 TestFlight에 올린다 (화면 QR과 같은 시크릿).
+  testflight:
+    if: github.event_name != 'pull_request'
+    needs: ios
+    runs-on: macos-15
+    env:
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      GAMEDECK_BUNDLE_ID: ${{ vars.GAMEDECK_BUNDLE_ID || 'io.github.walkin07.gamedeck' }}
+    steps:
+      - name: Check App Store Connect secrets
+        id: check
+        run: |
+          if [ -n "$TEAM_ID" ] && [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_KEY_P8" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::APPLE_TEAM_ID / ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8 시크릿이 없어 TestFlight 업로드를 건너뜁니다."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
+      - name: Select Xcode 26
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          xcodebuild -version
+      - name: Generate project
+        if: steps.check.outputs.ready == 'true'
+        run: brew install xcodegen && xcodegen generate --spec GameDeck/project.yml
+      - name: Write API key
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
+      - name: Archive
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          # 서명 없이 아카이브하고, 내보낼 때 Apple 클라우드 서명으로 배포용 서명을 붙인다 (인증서·프로필 파일 불필요).
+          xcodebuild archive -project GameDeck/GameDeck.xcodeproj -scheme GameDeck -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/GameDeck.xcarchive" \
+            GAMEDECK_BUNDLE_ID="$GAMEDECK_BUNDLE_ID" DEVELOPMENT_TEAM="$TEAM_ID" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" CODE_SIGNING_ALLOWED=NO
+      - name: Sign and upload to TestFlight
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/GameDeck.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
