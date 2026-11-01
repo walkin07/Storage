@@ -141,13 +141,16 @@ struct TutorialView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// - Parameter resume: 앱이 켜지면서 자동으로 열렸으면 보던 페이지부터, 버튼으로 열었으면 처음부터
-    init(resume: Bool, testPassed: Bool, onClose: @escaping () -> Void) {
-        let saved = resume ? UserDefaults.standard.integer(forKey: TutorialKeys.page) : 0
-        _page = State(initialValue: TutorialPage(rawValue: saved) ?? .welcome)
+    /// - Parameter start: 시작할 페이지. nil이면 보던 페이지부터 (처음 설치했으면 ‘튜토리얼 보기 / 건너뛰기’ 화면)
+    init(start: TutorialPage?, testPassed: Bool, onClose: @escaping () -> Void) {
+        let saved = TutorialPage(rawValue: UserDefaults.standard.integer(forKey: TutorialKeys.page)) ?? .welcome
+        _page = State(initialValue: start ?? saved)
         self.testPassed = testPassed
         self.onClose = onClose
     }
+
+    /// 위쪽 점으로 보여 줄 페이지 (첫 화면은 튜토리얼을 볼지 고르는 곳이라 뺀다)
+    private static let progressPages = TutorialPage.allCases.filter { $0 != .welcome }
 
     private var still: Bool { reduceMotion || TutorialMotion.frozen }
 
@@ -210,8 +213,11 @@ struct TutorialView: View {
 
             Spacer(minLength: 0)
             progressDots
+                .opacity(page == .welcome ? 0 : 1)
             Spacer(minLength: 0)
 
+            // 첫 화면에는 아래에 ‘건너뛰기’가 있고, 마지막 페이지에는 ‘완료’가 있어서 숨긴다.
+            let hidesLater = page == .welcome || page == .finish
             Button(action: onClose) {
                 Text("나중에")
                     .font(.subheadline.weight(.semibold))
@@ -220,9 +226,9 @@ struct TutorialView: View {
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .opacity(page == .finish ? 0 : 1)
-            .disabled(page == .finish)
-            .accessibilityHidden(page == .finish)
+            .opacity(hidesLater ? 0 : 1)
+            .disabled(hidesLater)
+            .accessibilityHidden(hidesLater)
             .accessibilityIdentifier("tutorial.later")
             .frame(width: 84, alignment: .trailing)
         }
@@ -233,7 +239,7 @@ struct TutorialView: View {
 
     private var progressDots: some View {
         HStack(spacing: 6) {
-            ForEach(TutorialPage.allCases) { item in
+            ForEach(Self.progressPages) { item in
                 Capsule()
                     .fill(item.rawValue <= page.rawValue ? Color.black : Color.black.opacity(0.12))
                     .frame(width: item == page ? 24 : 8, height: 8)
@@ -241,34 +247,51 @@ struct TutorialView: View {
         }
         .animation(.spring(duration: 0.45, bounce: 0.3), value: page)
         .accessibilityElement()
-        .accessibilityLabel("\(TutorialPage.allCases.count)쪽 중 \(page.rawValue + 1)쪽")
+        .accessibilityLabel("\(Self.progressPages.count)쪽 중 \(max(page.rawValue, 1))쪽")
+        .accessibilityHidden(page == .welcome)
     }
 
     private var bottomBar: some View {
-        Button(action: primaryAction) {
-            HStack(spacing: 8) {
-                Text(primaryTitle)
-                    .contentTransition(.interpolate)
-                Image(systemName: page == .finish ? "checkmark" : "arrow.right")
-                    .contentTransition(.symbolEffect(.replace))
-                    .symbolEffect(.bounce, value: returnTick)
+        VStack(spacing: 4) {
+            Button(action: primaryAction) {
+                HStack(spacing: 8) {
+                    Text(primaryTitle)
+                        .contentTransition(.interpolate)
+                    Image(systemName: page == .finish ? "checkmark" : "arrow.right")
+                        .contentTransition(.symbolEffect(.replace))
+                        .symbolEffect(.bounce, value: returnTick)
+                }
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: 30)
             }
-            .font(.headline)
-            .frame(maxWidth: .infinity, minHeight: 30)
+            .buttonStyle(.glassProminent)
+            .tint(.black)
+            .controlSize(.large)
+            .accessibilityIdentifier("tutorial.primary")
+
+            // 처음 화면: 튜토리얼을 볼지 건너뛸지 고른다.
+            if page == .welcome {
+                Button(action: onClose) {
+                    Text("건너뛰기")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("tutorial.skip")
+                .transition(.opacity.combined(with: .offset(y: 12)))
+            }
         }
-        .buttonStyle(.glassProminent)
-        .tint(.black)
-        .controlSize(.large)
-        .accessibilityIdentifier("tutorial.primary")
         .padding(.horizontal, 24)
         .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.bottom, page == .welcome ? 4 : 12)
         .animation(.smooth(duration: 0.3), value: page)
     }
 
     private var primaryTitle: String {
         switch page {
-        case .welcome: "시작하기"
+        case .welcome: "단축어 만들기 튜토리얼 보기"
         case .finish: "완료"
         default: "다음"
         }
@@ -392,7 +415,7 @@ private struct WelcomePage: View {
                     .font(.largeTitle.bold())
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("단축어를 하나 만들어 두면 어떤 앱에서든 화면에 보이는 QR을 바로 열 수 있어요. 지금 함께 만들어 볼게요.")
+                Text("단축어를 하나 만들어 두면, 어떤 앱에서든 화면에 보이는 QR을 바로 열 수 있어요.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)

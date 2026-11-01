@@ -137,7 +137,7 @@ jobs:
           for f in shots/*.jpg; do
             [ -e "$f" ] || continue
             echo "=====BEGIN $(basename "$f")====="
-            base64 -b 76 -i "$f"
+            base64 -b 4000 -i "$f"
             echo "=====END $(basename "$f")====="
           done
 

@@ -127,7 +127,7 @@ struct ShortcutMock: View {
         ZStack {
             Capsule()
                 .fill(.black)
-                .frame(width: 50, height: 17)
+                .frame(width: 44, height: 16)
             HStack {
                 if scene.inShortcuts && showsBackLink {
                     HStack(spacing: 2) {

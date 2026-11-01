@@ -33,8 +33,9 @@ struct ContentView: View {
     @AppStorage(TutorialKeys.page) private var tutorialPage = 0
     /// 처음 설치했으면 튜토리얼부터 보여 준다 (첫 화면부터 바로 보이도록 시작 값으로 정한다).
     @State private var showTutorial = !UserDefaults.standard.bool(forKey: TutorialKeys.done)
-    /// 앱이 켜지면서 열린 튜토리얼만 보던 페이지부터 이어 본다. 버튼으로 열면 처음부터.
-    @State private var tutorialResume = true
+    /// 튜토리얼을 시작할 페이지. nil이면 보던 페이지부터 (처음 설치했으면 ‘튜토리얼 보기 / 건너뛰기’ 화면).
+    /// 기본 화면의 버튼으로 열면 이미 보기로 고른 것이라 바로 1단계부터 연다.
+    @State private var tutorialStart: TutorialPage?
     @State private var tutorialTestPassed = false
     @State private var mode: AppMode = .scan
     @State private var scanned: ScannedText?
@@ -47,7 +48,7 @@ struct ContentView: View {
                 .allowsHitTesting(!showTutorial)
                 .accessibilityHidden(showTutorial)
             if showTutorial {
-                TutorialView(resume: tutorialResume, testPassed: tutorialTestPassed, onClose: closeTutorial)
+                TutorialView(start: tutorialStart, testPassed: tutorialTestPassed, onClose: closeTutorial)
                     .transition(.asymmetric(
                         insertion: .move(edge: .bottom),
                         removal: .opacity.combined(with: .scale(scale: 1.04))
@@ -101,7 +102,7 @@ struct ContentView: View {
     }
 
     private func openTutorial() {
-        tutorialResume = false
+        tutorialStart = .open
         tutorialTestPassed = false
         withAnimation(.spring(duration: 0.55, bounce: 0.1)) { showTutorial = true }
     }
