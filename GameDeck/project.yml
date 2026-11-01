@@ -1,0 +1,59 @@
+name: GameDeck
+options:
+  bundleIdPrefix: io.github.walkin07
+  developmentLanguage: ko
+  deploymentTarget:
+    iOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1,2"
+targets:
+  GameDeck:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Assets.xcassets
+    scheme: {}
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: 게임덱
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIRequiresFullScreen: true
+        UIUserInterfaceStyle: Dark
+        ITSAppUsesNonExemptEncryption: false
+        # MeloNX가 게임 목록을 돌려줄 때(gamedeck://melonx?games=…)와 바로가기(gamedeck://play, gamedeck://resume)에 쓴다.
+        CFBundleURLTypes:
+          - CFBundleURLName: gamedeck
+            CFBundleURLSchemes: [gamedeck]
+        # 엔진 앱이 설치됐는지 canOpenURL로 확인할 스킴
+        LSApplicationQueriesSchemes:
+          - melonx
+          - madeira
+          - madeira-steamui
+          - playport
+          - livecontainer
+          - stikjit
+          - stikdebug
+          - localdevvpn
+          - shortcuts
+        GCSupportedGameControllers:
+          - ProfileName: ExtendedGamepad
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.walkin07.gamedeck
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

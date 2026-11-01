@@ -1,0 +1,75 @@
+name: GameDeck
+
+on:
+  push:
+    paths:
+      - "GameDeck/**"
+      - ".github/workflows/gamedeck.yml"
+  pull_request:
+    paths:
+      - "GameDeck/**"
+      - ".github/workflows/gamedeck.yml"
+  workflow_dispatch:
+
+jobs:
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate --spec GameDeck/project.yml
+      - name: Build (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild -project GameDeck/GameDeck.xcodeproj -scheme GameDeck \
+            -destination 'generic/platform=iOS' -configuration Release \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log
+      - name: Show compile errors
+        if: failure()
+        run: grep -E "error:|warning: .*(isolated|Sendable)" build.log | sort -u | head -100 || true
+      - name: Check app bundle
+        run: |
+          APP=build/Build/Products/Release-iphoneos/GameDeck.app
+          test -f "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleURLTypes:0:CFBundleURLSchemes:0" "$APP/Info.plist" | grep -qx gamedeck
+          /usr/libexec/PlistBuddy -c "Print :LSApplicationQueriesSchemes" "$APP/Info.plist"
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p dist/Payload
+          cp -R build/Build/Products/Release-iphoneos/GameDeck.app dist/Payload/
+          (cd dist && zip -qry GameDeck-unsigned.ipa Payload)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GameDeck-unsigned-ipa
+          path: dist/GameDeck-unsigned.ipa
+
+  release:
+    if: github.event_name != 'pull_request'
+    needs: ios
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: gamedeck-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: GameDeck-unsigned-ipa
+          path: dist
+      - name: Publish "gamedeck-latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete gamedeck-latest --yes --cleanup-tag || true
+          gh release create gamedeck-latest dist/GameDeck-unsigned.ipa --target "$GITHUB_SHA" --prerelease \
+            --title "게임덱 (최신 빌드)" \
+            --notes "GameDeck-unsigned.ipa: Sideloadly · SideStore · LiveContainer 등으로 아이폰에 설치하세요. 사용법은 저장소의 GameDeck/README.md에 있어요."

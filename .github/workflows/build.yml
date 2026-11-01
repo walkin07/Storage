@@ -1,8 +1,15 @@
 name: Build
 
 on:
+  # 게임덱(GameDeck/)만 바뀐 push에서는 화면 QR을 다시 빌드·배포하지 않는다 (gamedeck.yml이 따로 빌드).
   push:
+    paths-ignore:
+      - "GameDeck/**"
+      - ".github/workflows/gamedeck.yml"
   pull_request:
+    paths-ignore:
+      - "GameDeck/**"
+      - ".github/workflows/gamedeck.yml"
   workflow_dispatch:
 
 jobs:

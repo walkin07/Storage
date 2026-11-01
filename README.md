@@ -113,3 +113,7 @@ Chrome 웹 스토어(1회 $5)나 Edge 부가 기능(무료)에 올리면 개발�
   - `vendor/zxing-reader.js`, `vendor/zxing_reader.wasm`: [zxing-wasm](https://github.com/Sec-ant/zxing-wasm) 3.1.5 (MIT)
 - `.github/workflows/build.yml`: iOS 앱 빌드(서명 없는 IPA), 확장 검사·패키징, Releases 업로드
 - 직접 Xcode로 빌드하려면: `brew install xcodegen && xcodegen generate` 후 두 타깃 모두 Team 선택 (iOS 26, Xcode 26 이상)
+
+## 다른 앱
+
+- [게임덱 (GameDeck)](GameDeck/README.md): 스위치·스팀 게임을 한 화면에 모아 두고 컨트롤러로 바로 실행하는 디로이드덱 스타일 런처
