@@ -6,14 +6,18 @@ struct GameCard: View {
     let isFocused: Bool
     /// nil이면 격자 칸의 너비를 따른다.
     let width: CGFloat?
+    /// 가로 선반에서는 선택한 게임 이름이 위에 크게 나오므로 카드 아래 이름을 숨긴다.
+    var showsTitle = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             cover
-            Text(game.title)
-                .font(.footnote.weight(.semibold))
-                .lineLimit(1)
-                .foregroundStyle(.white.opacity(isFocused ? 1 : 0.72))
+            if showsTitle {
+                Text(game.title)
+                    .font(.footnote.weight(.semibold))
+                    .lineLimit(1)
+                    .foregroundStyle(.white.opacity(isFocused ? 1 : 0.72))
+            }
         }
         .frame(width: width)
         .scaleEffect(isFocused ? 1.06 : 1, anchor: .bottom)
@@ -54,55 +58,86 @@ struct GameCard: View {
     }
 }
 
-/// 선택한 게임의 큰 정보와 플레이 버튼
+/// 선택한 게임의 큰 정보와 플레이 버튼.
+/// wide(가로 화면): 정보 한 줄 + 제목, 오른쪽에 버튼. 세로 화면: 위에서 아래로 쌓는다.
 struct HeroPanel: View {
     let game: Game
-    let compact: Bool
+    let wide: Bool
+    var titleSize: CGFloat = 30
     let onPlay: () -> Void
     let onOptions: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: compact ? 6 : 10) {
-            HStack(spacing: 8) {
-                PlatformBadge(platform: game.platform)
-                if let runner = game.runner {
-                    Text(runner.info.name)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.75))
+        if wide {
+            HStack(alignment: .bottom, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    metaRow(withSummary: true)
+                    Text(game.title)
+                        .font(.system(size: titleSize, weight: .heavy))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
                 }
-                if game.favorite {
-                    Image(systemName: "star.fill")
-                        .font(.caption)
-                        .foregroundStyle(.yellow)
-                }
+                Spacer(minLength: 12)
+                buttons
             }
-            Text(game.title)
-                .font(compact ? .title2.weight(.bold) : .system(size: 34, weight: .heavy))
-                .lineLimit(2)
-                .minimumScaleFactor(0.6)
-            Text(game.playedSummary)
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.7))
-            HStack(spacing: 10) {
-                Button(action: onPlay) {
-                    Label("플레이", systemImage: "play.fill")
-                        .font(.headline)
-                        .frame(minWidth: compact ? 96 : 128)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(game.platform.tint)
-                Button(action: onOptions) {
-                    Label("옵션", systemImage: "ellipsis")
-                        .labelStyle(.iconOnly)
-                        .font(.headline)
-                }
-                .buttonStyle(.glass)
+            .foregroundStyle(.white)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                metaRow(withSummary: false)
+                Text(game.title)
+                    .font(.title2.weight(.bold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+                Text(game.playedSummary)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.7))
+                buttons
+                    .padding(.top, 2)
             }
-            .controlSize(.large)
-            .padding(.top, compact ? 2 : 6)
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func metaRow(withSummary: Bool) -> some View {
+        HStack(spacing: 8) {
+            PlatformBadge(platform: game.platform)
+            if let runner = game.runner {
+                Text(runner.info.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+            if game.favorite {
+                Image(systemName: "star.fill")
+                    .font(.caption)
+                    .foregroundStyle(.yellow)
+            }
+            if withSummary {
+                Text(game.playedSummary)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.65))
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var buttons: some View {
+        HStack(spacing: 10) {
+            Button(action: onPlay) {
+                Label("플레이", systemImage: "play.fill")
+                    .font(.headline)
+                    .frame(minWidth: 96)
+            }
+            .buttonStyle(.glassProminent)
+            .tint(game.platform.tint)
+            Button(action: onOptions) {
+                Label("옵션", systemImage: "ellipsis")
+                    .labelStyle(.iconOnly)
+                    .font(.headline)
+            }
+            .buttonStyle(.glass)
+        }
+        .controlSize(.large)
     }
 }
 

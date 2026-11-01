@@ -78,15 +78,16 @@ struct HomeView: View {
         GeometryReader { geo in
             let landscape = geo.size.width > geo.size.height
             let columns = Self.columns(width: geo.size.width, minimum: cardSize.gridMinimum)
+            let shelf = Self.shelfCardWidth(height: geo.size.height, preferred: cardSize.shelfWidth, hints: pad.controllerName != nil)
             ZStack {
                 DeckBackdrop(game: current)
                 VStack(spacing: 0) {
                     topBar(landscape: landscape)
-                    content(list: list, current: current, landscape: landscape, columns: columns)
+                    content(list: list, current: current, landscape: landscape, columns: columns, shelfWidth: shelf)
                     if pad.controllerName != nil {
                         ButtonHintBar()
                             .padding(.horizontal, landscape ? 28 : 18)
-                            .padding(.vertical, 8)
+                            .padding(.bottom, 6)
                     }
                 }
             }
@@ -100,33 +101,63 @@ struct HomeView: View {
         }
     }
 
+    @ViewBuilder
     private func topBar(landscape: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 14) {
-                Text("GameDeck")
-                    .font(.title3.weight(.heavy))
-                    .fontWidth(.expanded)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .fixedSize()
-                if landscape { filterChips }
-                Spacer(minLength: 8)
-                if landscape { StatusCluster(controllerName: pad.controllerName) }
-                GlassEffectContainer(spacing: 8) {
-                    HStack(spacing: 8) {
-                        RoundIconButton(symbol: "plus", label: "게임 추가") { sheet = .add }
-                        RoundIconButton(symbol: "bolt.horizontal", label: "엔진 준비 상태") { sheet = .engines }
-                        RoundIconButton(symbol: "gearshape", label: "설정") { sheet = .settings }
+        Group {
+            if landscape {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 14) {
+                        logo
+                        filterChips
+                        Spacer(minLength: 8)
+                        StatusCluster(controllerName: pad.controllerName)
+                        toolButtons
                     }
+                    HStack(spacing: 14) {
+                        logo
+                        filterChips
+                        Spacer(minLength: 8)
+                        toolButtons
+                    }
+                    stackedTopBar
                 }
-            }
-            if !landscape {
-                ScrollView(.horizontal, showsIndicators: false) { filterChips }
-                    .scrollClipDisabled()
+            } else {
+                stackedTopBar
             }
         }
         .padding(.horizontal, landscape ? 28 : 18)
-        .padding(.top, landscape ? 12 : 6)
+        .padding(.top, landscape ? 10 : 6)
+    }
+
+    private var stackedTopBar: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 14) {
+                logo
+                Spacer(minLength: 8)
+                toolButtons
+            }
+            ScrollView(.horizontal, showsIndicators: false) { filterChips }
+                .scrollClipDisabled()
+        }
+    }
+
+    private var logo: some View {
+        Text("GameDeck")
+            .font(.title3.weight(.heavy))
+            .fontWidth(.expanded)
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    private var toolButtons: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                RoundIconButton(symbol: "plus", label: "게임 추가") { sheet = .add }
+                RoundIconButton(symbol: "bolt.horizontal", label: "엔진 준비 상태") { sheet = .engines }
+                RoundIconButton(symbol: "gearshape", label: "설정") { sheet = .settings }
+            }
+        }
     }
 
     private var filterChips: some View {
@@ -137,9 +168,11 @@ struct HomeView: View {
                         withAnimation(.snappy) { filter = item }
                     } label: {
                         Text(item.title)
-                            .font(.subheadline.weight(.semibold))
+                            .font(.footnote.weight(.semibold))
                             .foregroundStyle(item == filter ? Color.black : Color.white)
-                            .padding(.horizontal, 14)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                     }
                     .buttonStyle(.plain)
@@ -150,7 +183,7 @@ struct HomeView: View {
     }
 
     @ViewBuilder
-    private func content(list: [Game], current: Game?, landscape: Bool, columns: Int) -> some View {
+    private func content(list: [Game], current: Game?, landscape: Bool, columns: Int, shelfWidth: CGFloat) -> some View {
         if library.games.isEmpty {
             EmptyLibraryView(
                 onImportMeloNX: importFromMeloNX,
@@ -165,28 +198,34 @@ struct HomeView: View {
             }
             .frame(maxHeight: .infinity)
         } else if landscape {
-            shelfLayout(list: list, current: current)
+            shelfLayout(list: list, current: current, cardWidth: shelfWidth)
         } else {
             gridLayout(list: list, current: current, columns: columns)
         }
     }
 
-    private func shelfLayout(list: [Game], current: Game?) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private func shelfLayout(list: [Game], current: Game?, cardWidth: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
             Spacer(minLength: 0)
             if let current {
-                HeroPanel(game: current, compact: false, onPlay: { play(current) }, onOptions: { sheet = .detail(current.id) })
-                    .padding(.horizontal, 28)
+                HeroPanel(
+                    game: current,
+                    wide: true,
+                    titleSize: cardWidth > 170 ? 38 : 28,
+                    onPlay: { play(current) },
+                    onOptions: { sheet = .detail(current.id) }
+                )
+                .padding(.horizontal, 28)
             }
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .bottom, spacing: 18) {
+                    LazyHStack(alignment: .bottom, spacing: cardWidth > 120 ? 18 : 14) {
                         ForEach(list) { game in
-                            card(game, focused: game.id == current?.id, width: cardSize.shelfWidth)
+                            card(game, focused: game.id == current?.id, width: cardWidth, showsTitle: false)
                         }
                     }
                     .padding(.horizontal, 28)
-                    .padding(.vertical, 16)
+                    .padding(.vertical, 12)
                 }
                 .scrollClipDisabled()
                 .onChange(of: focusedID) { _, id in scroll(proxy, to: id) }
@@ -198,7 +237,7 @@ struct HomeView: View {
     private func gridLayout(list: [Game], current: Game?, columns: Int) -> some View {
         VStack(spacing: 0) {
             if let current {
-                HeroPanel(game: current, compact: true, onPlay: { play(current) }, onOptions: { sheet = .detail(current.id) })
+                HeroPanel(game: current, wide: false, onPlay: { play(current) }, onOptions: { sheet = .detail(current.id) })
                     .padding(.horizontal, 18)
                     .padding(.vertical, 12)
             }
@@ -217,8 +256,8 @@ struct HomeView: View {
         }
     }
 
-    private func card(_ game: Game, focused: Bool, width: CGFloat?) -> some View {
-        GameCard(game: game, isFocused: focused, width: width)
+    private func card(_ game: Game, focused: Bool, width: CGFloat?, showsTitle: Bool = true) -> some View {
+        GameCard(game: game, isFocused: focused, width: width, showsTitle: showsTitle)
             .id(game.id)
             .onTapGesture { tap(game) }
             .contextMenu { menuItems(for: game) }
@@ -372,6 +411,15 @@ struct HomeView: View {
 
     private static func columns(width: CGFloat, minimum: CGFloat) -> Int {
         max(2, Int((width - 36 + 14) / (minimum + 14)))
+    }
+
+    /// 가로 화면 선반의 카드 너비: 위쪽 막대 · 게임 정보 · 버튼 안내를 빼고 남은 높이에 2:3 표지가 들어가게 한다.
+    /// 아이패드처럼 높이가 넉넉하면 설정한 크기보다 조금 크게.
+    private static func shelfCardWidth(height: CGFloat, preferred: CGFloat, hints: Bool) -> CGFloat {
+        let reserved: CGFloat = 52 + 74 + 10 + 24 + 16 + (hints ? 30 : 0)
+        let fitting = (height - reserved) / 1.5 / 1.06
+        let largest = height > 600 ? preferred * 1.35 : preferred
+        return max(72, min(largest, fitting))
     }
 
     // MARK: - 링크
