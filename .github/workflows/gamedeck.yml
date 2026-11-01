@@ -156,15 +156,21 @@ jobs:
         with:
           name: GameDeck-unsigned-ipa
           path: dist
+      # 지웠다가 다시 만들면 빌드한 커밋이 브랜치의 최신 커밋이 아닐 때 HTTP 403으로 막혀 릴리스가 사라진다.
+      # 그래서 있으면 파일만 바꿔 올리고, 없을 때만 새로 만든다.
       - name: Publish "gamedeck-latest" release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release delete gamedeck-latest --yes --cleanup-tag || true
-          gh release create gamedeck-latest dist/GameDeck-unsigned.ipa --target "$GITHUB_SHA" --prerelease \
-            --title "게임덱 (최신 빌드)" \
-            --notes "GameDeck-unsigned.ipa: Sideloadly · SideStore · LiveContainer 등으로 아이폰에 설치하세요. 사용법은 저장소의 GameDeck/README.md에 있어요."
+          TITLE="게임덱 (최신 빌드)"
+          NOTES="GameDeck-unsigned.ipa: Sideloadly · SideStore · LiveContainer 등으로 아이폰에 설치하세요. 사용법은 저장소의 GameDeck/README.md에 있어요. (커밋 ${GITHUB_SHA::7})"
+          if gh release view gamedeck-latest >/dev/null 2>&1; then
+            gh release upload gamedeck-latest dist/GameDeck-unsigned.ipa --clobber
+            gh release edit gamedeck-latest --title "$TITLE" --notes "$NOTES"
+          else
+            gh release create gamedeck-latest dist/GameDeck-unsigned.ipa --target "$GITHUB_SHA" --prerelease --title "$TITLE" --notes "$NOTES"
+          fi
 
   # Apple 개발자 계정 시크릿이 있으면 서명해서 TestFlight에 올린다 (화면 QR과 같은 시크릿).
   testflight:
@@ -226,8 +232,14 @@ jobs:
           </dict>
           </plist>
           PLIST
+          set -o pipefail
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/GameDeck.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" \
-            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/export.log" || {
+            if grep -q "Error Downloading App Information" "$RUNNER_TEMP/export.log"; then
+              echo "::error::App Store Connect에 번들 ID $GAMEDECK_BUNDLE_ID 앱이 없어요. GameDeck/README.md의 TestFlight 준비 1~2단계(App ID 등록, 앱 만들기)를 먼저 해 주세요."
+            fi
+            exit 1
+          }
