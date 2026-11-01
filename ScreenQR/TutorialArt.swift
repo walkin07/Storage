@@ -433,15 +433,16 @@ struct WelcomeHero: View {
                 Capsule().fill(Color.black.opacity(0.05)).frame(width: 70, height: 8)
             }
             .frame(maxHeight: .infinity)
-            Capsule()
-                .fill(.black)
-                .frame(width: 46, height: 14)
-                .padding(.top, 12)
             if opened {
                 banner
                     .padding(.top, 34)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
+            // 알림이 다이내믹 아일랜드 뒤에서 내려오도록 아일랜드를 맨 위에 그린다.
+            Capsule()
+                .fill(.black)
+                .frame(width: 46, height: 14)
+                .padding(.top, 12)
         }
         .frame(width: 150, height: 300)
         .clipShape(.rect(cornerRadius: 34, style: .continuous))

@@ -93,7 +93,7 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
         case .open:
             [
                 Text("아래 ‘단축어 앱 열기’를 누르면 빈 단축어가 열려요"),
-                Text("열렸으면 왼쪽 위 ‘\(Image(systemName: "arrowtriangle.left.fill")) Screen QR Scanner’를 눌러 여기로 돌아와요"),
+                Text("열렸으면 왼쪽 위 ‘\(Image(systemName: "arrowtriangle.left.fill"))\u{00A0}Screen\u{00A0}QR\u{00A0}Scanner’\u{2060}를 눌러 여기로 돌아와요"),
             ]
         case .screenshot:
             [
@@ -102,8 +102,8 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
             ]
         case .qr:
             [
-                Text("다시 ‘QR’을 입력하고 ‘이미지 속 QR 열기’를 눌러요"),
-                Text("‘스크린샷에서 QR 열기’로 이어졌는지 확인해요"),
+                Text("다시 ‘QR’을 입력하고 ‘이미지\u{00A0}속\u{00A0}QR\u{00A0}열기’\u{2060}를 눌러요"),
+                Text("‘스크린샷에서\u{00A0}QR\u{00A0}열기’\u{2060}로 이어졌는지 확인해요"),
                 Text("오른쪽 위 완료(\(Image(systemName: "checkmark")))를 누르면 끝!"),
             ]
         case .welcome, .finish:
@@ -194,43 +194,50 @@ struct TutorialView: View {
     // MARK: 위·아래 막대
 
     private var topBar: some View {
-        HStack(spacing: 0) {
-            Button(action: back) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(.circle)
+        // 숨길 때는 아예 만들지 않는다 (보이지 않는 버튼이 VoiceOver에 잡히지 않게). 자리는 그대로 둬서 가운데 점이 흔들리지 않는다.
+        let hidesLater = page == .welcome || page == .finish
+        return HStack(spacing: 0) {
+            ZStack(alignment: .leading) {
+                if page != .welcome {
+                    Button(action: back) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(.circle)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("이전")
+                    .accessibilityIdentifier("tutorial.back")
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                }
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: .circle)
-            .opacity(page == .welcome ? 0 : 1)
-            .disabled(page == .welcome)
-            .accessibilityLabel("이전")
-            .accessibilityHidden(page == .welcome)
-            .accessibilityIdentifier("tutorial.back")
-            .frame(width: 84, alignment: .leading)
+            .frame(width: 84, height: 44, alignment: .leading)
 
             Spacer(minLength: 0)
-            progressDots
-                .opacity(page == .welcome ? 0 : 1)
+            if page != .welcome {
+                progressDots
+                    .transition(.opacity)
+            }
             Spacer(minLength: 0)
 
             // 첫 화면에는 아래에 ‘건너뛰기’가 있고, 마지막 페이지에는 ‘완료’가 있어서 숨긴다.
-            let hidesLater = page == .welcome || page == .finish
-            Button(action: onClose) {
-                Text("나중에")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(height: 44)
-                    .contentShape(.rect)
+            ZStack(alignment: .trailing) {
+                if !hidesLater {
+                    Button(action: onClose) {
+                        Text("나중에")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(height: 44)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("tutorial.later")
+                    .transition(.opacity)
+                }
             }
-            .buttonStyle(.plain)
-            .opacity(hidesLater ? 0 : 1)
-            .disabled(hidesLater)
-            .accessibilityHidden(hidesLater)
-            .accessibilityIdentifier("tutorial.later")
-            .frame(width: 84, alignment: .trailing)
+            .frame(width: 84, height: 44, alignment: .trailing)
         }
         .padding(.horizontal, 16)
         .padding(.top, 4)
@@ -248,7 +255,6 @@ struct TutorialView: View {
         .animation(.spring(duration: 0.45, bounce: 0.3), value: page)
         .accessibilityElement()
         .accessibilityLabel("\(Self.progressPages.count)쪽 중 \(max(page.rawValue, 1))쪽")
-        .accessibilityHidden(page == .welcome)
     }
 
     private var bottomBar: some View {
@@ -757,8 +763,8 @@ private struct FinishPage: View {
             }
             VStack(alignment: .leading, spacing: 12) {
                 TutorialStepRow(number: 1, text: Text("설정 → 앱 → Safari → 확장 프로그램"))
-                TutorialStepRow(number: 2, text: Text("‘Screen QR Scanner’를 켜요"))
-                TutorialStepRow(number: 3, text: Text("Safari 주소창의 메뉴에서 ‘Screen QR Scanner’를 누르면 보고 있는 페이지의 QR이 열려요"))
+                TutorialStepRow(number: 2, text: Text("‘Screen\u{00A0}QR\u{00A0}Scanner’\u{2060}를 켜요"))
+                TutorialStepRow(number: 3, text: Text("Safari 주소창의 메뉴에서 ‘Screen\u{00A0}QR\u{00A0}Scanner’\u{2060}를 누르면 보고 있는 페이지의 QR이 열려요"))
             }
         }
         .padding(20)
