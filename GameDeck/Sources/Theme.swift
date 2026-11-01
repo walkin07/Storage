@@ -100,16 +100,23 @@ private struct BatteryIcon: View {
 /// 게임패드가 연결됐을 때 아래에 보이는 버튼 안내
 struct ButtonHintBar: View {
     var body: some View {
-        HStack(spacing: 18) {
-            Hint(key: "A", text: "플레이")
-            Hint(key: "X", text: "옵션")
-            Hint(key: "Y", text: "게임 추가")
-            Hint(key: "L R", text: "목록 바꾸기")
-            Hint(key: "≡", text: "설정")
-            Spacer(minLength: 0)
+        ViewThatFits(in: .horizontal) {
+            hints(full: true)
+            hints(full: false)
         }
         .font(.caption.weight(.semibold))
         .foregroundStyle(.white.opacity(0.8))
+    }
+
+    private func hints(full: Bool) -> some View {
+        HStack(spacing: full ? 18 : 12) {
+            Hint(key: "A", text: "플레이")
+            Hint(key: "X", text: "옵션")
+            Hint(key: "Y", text: full ? "게임 추가" : "추가")
+            Hint(key: "L R", text: full ? "목록 바꾸기" : "목록")
+            Hint(key: "≡", text: "설정")
+            Spacer(minLength: 0)
+        }
     }
 
     private struct Hint: View {
@@ -124,6 +131,8 @@ struct ButtonHintBar: View {
                     .frame(minWidth: 20, minHeight: 20)
                     .background(.white.opacity(0.18), in: .capsule)
                 Text(text)
+                    .lineLimit(1)
+                    .fixedSize()
             }
         }
     }

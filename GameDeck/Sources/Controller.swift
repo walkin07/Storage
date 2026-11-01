@@ -25,7 +25,12 @@ final class ControllerHub: ObservableObject {
             self?.attach(controller)
         })
         observers.append(center.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { [weak self] _ in
+            self?.releaseDirections()
             self?.updateName()
+        })
+        // 게임을 켜러 다른 앱으로 넘어가면 방향 입력이 끊긴다. 돌아왔을 때 선택이 저절로 움직이지 않게 지운다.
+        observers.append(center.addObserver(forName: Notification.Name("UIApplicationWillResignActiveNotification"), object: nil, queue: .main) { [weak self] _ in
+            self?.releaseDirections()
         })
         GCController.controllers().forEach { attach($0) }
         updateName()
@@ -70,6 +75,12 @@ final class ControllerHub: ObservableObject {
         controllerName = pads.first.map { $0.vendorName ?? "게임패드" }
     }
 
+    private func releaseDirections() {
+        repeats.values.forEach { $0.cancel() }
+        repeats.removeAll()
+        held.removeAll()
+    }
+
     private func direction(x: Float, y: Float, source: String, threshold: Float) {
         var next: PadInput?
         if abs(x) >= abs(y) {
@@ -83,14 +94,16 @@ final class ControllerHub: ObservableObject {
         repeats[source] = nil
         guard let next else { return }
         inputs.send(next)
-        scheduleRepeat(next, source: source, after: 0.4)
+        scheduleRepeat(next, source: source, after: 0.4, remaining: 80)
     }
 
-    private func scheduleRepeat(_ input: PadInput, source: String, after delay: TimeInterval) {
+    /// 누르고 있는 동안 반복한다. 손을 뗐다는 신호를 놓쳐도 끝없이 움직이지 않게 횟수에 상한을 둔다.
+    private func scheduleRepeat(_ input: PadInput, source: String, after delay: TimeInterval, remaining: Int) {
+        guard remaining > 0 else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.held[source] == input else { return }
             self.inputs.send(input)
-            self.scheduleRepeat(input, source: source, after: 0.11)
+            self.scheduleRepeat(input, source: source, after: 0.11, remaining: remaining - 1)
         }
         repeats[source] = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)

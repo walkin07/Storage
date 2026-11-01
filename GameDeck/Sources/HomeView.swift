@@ -154,7 +154,7 @@ struct HomeView: View {
         GlassEffectContainer(spacing: 8) {
             HStack(spacing: 8) {
                 RoundIconButton(symbol: "plus", label: "게임 추가") { sheet = .add }
-                RoundIconButton(symbol: "bolt.horizontal", label: "엔진 준비 상태") { sheet = .engines }
+                RoundIconButton(symbol: "puzzlepiece.extension", label: "엔진 준비 상태") { sheet = .engines }
                 RoundIconButton(symbol: "gearshape", label: "설정") { sheet = .settings }
             }
         }
@@ -492,7 +492,7 @@ struct EmptyLibraryView: View {
         }
         .buttonStyle(.glass)
         Button(action: onEngines) {
-            Label("엔진 준비 상태", systemImage: "bolt.horizontal")
+            Label("엔진 준비 상태", systemImage: "puzzlepiece.extension")
         }
         .buttonStyle(.glass)
     }
