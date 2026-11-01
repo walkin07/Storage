@@ -33,7 +33,8 @@ jobs:
             -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log
       - name: Show compile errors
         if: failure()
-        run: grep -E "error:|warning: .*(isolated|Sendable)" build.log | sort -u | head -100 || true
+        run: |
+          grep -E "error:|warning: .*(isolated|Sendable)" build.log | sort -u | head -100 || true
       - name: Check app bundle
         run: |
           APP=build/Build/Products/Release-iphoneos/GameDeck.app
