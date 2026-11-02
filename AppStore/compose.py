@@ -5,7 +5,7 @@
 - 아이폰 스크린샷 6장: 1320×2868 (6.9형 iPhone 원본에서. 검색 결과에는 앞의 3장이 나온다)
   + 같은 그림을 줄인 1206×2622 (6.3형 칸이 받는 크기)
 - 아이패드 스크린샷 6장: 2064×2752 (13형 iPad 원본에서, --ipad)
-- 아이폰 듀오 스크린샷 6장: 2853×2007 (펼친 안쪽 화면 원본에서, --duo)
+- 아이폰 듀오 스크린샷 6장: 1398×2034 (접은 바깥 화면 원본에서, --duo)
 을 만들고, AppStore/에 있는 헤더 이미지(3840×1646 · 5244×2950)를 함께 넣는다.
 macOS의 Apple SD Gothic Neo 글꼴을 쓴다 (appstore.yml 워크플로에서 실행).
 
@@ -49,9 +49,9 @@ IPAD_W, IPAD_H = 2064, 2752
 # 아이폰 6.3형 칸이 받는 크기. 6.9형(1320×2868)으로 만든 그림을 줄여서 함께 저장한다 (가로세로 비율이 같다).
 IPHONE_SMALL = (1206, 2622)
 
-# 아이폰 듀오: 펼친 안쪽 화면(가로로 긴 화면)이라 가로 2853×2007로 만들고, 제목은 한 줄로 쓴다.
-DUO_W, DUO_H = 2853, 2007
-DUO_SHOTS = [(name, output, title.replace("\n", " "), subtitle) for name, output, title, subtitle in SHOTS]
+# 아이폰 듀오: 접은 바깥 화면(세로 1398×2034). 문구는 아이폰과 같다.
+DUO_W, DUO_H = 1398, 2034
+DUO_SHOTS = SHOTS
 
 # 헤더(SQRS 로고) — AppStore/ 폴더에 있는 그림을 그대로 넣는다.
 # 3840×1646: 제품 페이지 헤더 전용 · 5244×2950: 헤더와 검색 결과에 함께 쓰는 PNG
@@ -115,13 +115,15 @@ def draw_lines(draw, text, text_font, top, color, left=None, width=None, spacing
 
 
 # 기기별 테두리 두께와 화면 모서리 (원본 화면 픽셀 기준)
-# 아이폰: 모서리 약 62pt × 3 · 아이패드: 약 18pt × 2 · 아이폰 듀오 안쪽 화면: 얇은 테두리, 약 30pt × 3
-DEVICE_STYLES = {"phone": (40, 186), "tablet": (110, 36), "duo": (64, 90)}
+# 아이폰: 모서리 약 62pt × 3 · 아이패드: 약 18pt × 2
+# 아이폰 듀오 바깥 화면: 약 45pt × 3 (뒤로 버튼이 화면 맨 위 구석에 있어서 그보다 둥글면 버튼이 잘린다)
+DEVICE_STYLES = {"phone": (40, 186), "tablet": (110, 36), "duo": (40, 135)}
 
 
 def device(shot, height, style="phone"):
     """원본 화면을 줄여 둥근 모서리 · 검은 테두리를 입힌 기기 (RGBA, 전체 높이 = height).
-    아이폰(phone)은 다이내믹 아일랜드를 그려 넣고, 아이패드(tablet) · 아이폰 듀오(duo)는 그리지 않는다."""
+    아이폰(phone)은 다이내믹 아일랜드를 그려 넣고, 아이패드(tablet) · 아이폰 듀오 바깥 화면(duo)은
+    상태 막대가 오른쪽 세로줄에 있어서 그리지 않는다."""
     border, corner = DEVICE_STYLES[style]
     scale = height / (shot.height + border * 2)
     screen_w, screen_h = round(shot.width * scale), round(shot.height * scale)
@@ -191,26 +193,33 @@ def screenshot(raw, title, subtitle, style="phone"):
 
 
 def duo_screenshot(raw, title, subtitle):
-    """아이폰 듀오 펼친 화면: 위에 한 줄 제목과 설명, 아래에 가로로 긴 기기 (2853×2007).
-    원본이 세로로 찍혔으면 2007×2853로 같은 배치를 쓴다."""
-    width, height = (DUO_W, DUO_H) if raw.width >= raw.height else (DUO_H, DUO_W)
+    """아이폰 듀오 접은 화면: 위에 제목과 설명, 아래에 기기 (1398×2034).
+    아이폰보다 세로가 짧아서 글을 조금 작게 쓰고, 제목이 한 줄이든 두 줄이든 기기는 같은 자리에 둔다."""
+    width, height = (DUO_W, DUO_H) if raw.height >= raw.width else (DUO_H, DUO_W)
     canvas = background(width, height)
     draw = ImageDraw.Draw(canvas)
-    y = draw_lines(draw, title, font("Bold", 116), 110, INK, width=width, spacing=1.12)
-    y = draw_lines(draw, subtitle, font("Medium", 56), y + 30, GRAY, width=width, spacing=1.2)
+    title_font = font("Bold", 104)
+    sub_font = font("Medium", 50)
 
-    device_top = y + 84
+    device_top = 500
+    _, _, title_h = text_block(title, title_font, 1.12)
+    _, _, sub_h = text_block(subtitle, sub_font, 1.2)
+    block_h = title_h + 28 + sub_h
+    top = max(84, (device_top - 50 - block_h) // 2 + 30)
+    y = draw_lines(draw, title, title_font, top, INK, width=width, spacing=1.12)
+    draw_lines(draw, subtitle, sub_font, y + 28, GRAY, width=width, spacing=1.2)
+
     border, _ = DEVICE_STYLES["duo"]
     aspect = (raw.width + border * 2) / (raw.height + border * 2)
-    frame_h = min(height - device_top - 72, round((width - 2 * 180) / aspect))
+    frame_h = min(height - device_top - 64, round((width - 2 * 120) / aspect))
     frame = device(raw, frame_h, style="duo")
     paste_with_shadow(canvas, frame, (width - frame.width) // 2, device_top)
     return canvas
 
 
 def load_raws(shots, source):
-    """원본 화면을 보이는 방향대로 읽는다. 아이폰 듀오 안쪽 화면은 세로로 저장되고
-    방향 정보로 눕혀 보이게 되어 있어서, 그 정보대로 돌려 놓는다 (exif_transpose)."""
+    """원본 화면을 보이는 방향대로 읽는다. 시뮬레이터가 화면을 돌려 저장하고 방향 정보만 붙여 두는
+    경우가 있어서(아이폰 듀오 펼친 화면 등), 그 정보대로 돌려 놓는다 (exif_transpose)."""
     raws = {}
     for name, _, _, _ in shots:
         path = os.path.join(source, name + ".png")

@@ -3,12 +3,19 @@ name: App Store images
 # 앱 스토어에 올릴 이미지를 실제 앱 화면으로 만든다.
 # - 아이폰 스크린샷 6장: 1320×2868(6.9형) + 같은 그림을 줄인 1206×2622(6.3형)
 # - 아이패드 스크린샷 6장: 2064×2752(13형)
-# - 아이폰 듀오 스크린샷 6장: 2853×2007(펼친 안쪽 화면)
+# - 아이폰 듀오 스크린샷 6장: 1398×2034(접은 바깥 화면)
 # - 헤더 이미지: 3840×1646 · 5244×2950 (AppStore/에 있는 SQRS 로고 그림)
 # 시뮬레이터에서 화면을 찍고(AppStoreScreenshots UI 테스트), AppStore/compose.py가 문구와 기기 틀을 입힌다.
 # 결과는 "screenqr-appstore" 릴리스에 올라간다. Actions 탭에서 직접 실행하거나 아래 파일이 바뀌면 실행된다.
+# 직접 실행할 때 기기를 고르면 그 기기 이미지만 다시 찍어 바꾸고, 나머지는 릴리스에 있는 그대로 둔다.
 on:
   workflow_dispatch:
+    inputs:
+      devices:
+        description: "다시 찍을 기기"
+        type: choice
+        default: all
+        options: [all, duo, iphone-ipad]
   push:
     paths:
       - "AppStore/**"
@@ -87,11 +94,11 @@ jobs:
               --batteryState discharging --batteryLevel 100
           done
           SH
-      # 아이폰 듀오는 펼친 안쪽 화면을 찍는다. Xcode에는 접고 펴는 명령이 없어서, Device Hub의 경첩 슬라이더와
+      # 아이폰 듀오는 접은 바깥 화면을 찍는다. Xcode에는 접고 펴는 명령이 없어서, Device Hub의 경첩 슬라이더와
       # 같은 신호를 보내는 공개 도구 duo-hinge(MIT, github.com/tosbaha/duo-fold-control)를 고정된 버전 · 해시로 받아 쓴다.
       # 비공개 시뮬레이터 기능에 기대므로, 여기서 실패해도 아이폰 · 아이패드 이미지는 그대로 만든다.
-      - name: Capture iPhone Duo screens (unfolded)
-        id: duo
+      - name: Capture iPhone Duo screens (folded)
+        if: inputs.devices != 'iphone-ipad'
         continue-on-error: true
         timeout-minutes: 30
         run: |
@@ -100,10 +107,10 @@ jobs:
           echo "771a6ef85afaa95ed2868b35c2966872e958e2675042edf940e396a411ffdb0c  $RUNNER_TEMP/duo-hinge.m" | shasum -a 256 -c -
           clang -fobjc-arc -framework Foundation -o "$RUNNER_TEMP/duo-hinge" "$RUNNER_TEMP/duo-hinge.m"
           bash "$RUNNER_TEMP/boot.sh" "$DUO"
-          DEVELOPER_DIR="$(xcode-select -p)" "$RUNNER_TEMP/duo-hinge" -d "$DUO" flat
+          DEVELOPER_DIR="$(xcode-select -p)" "$RUNNER_TEMP/duo-hinge" -d "$DUO" closed
           sleep 3
           set -o pipefail
-          TEST_RUNNER_DUO_STATE=flat xcodebuild test -project ScreenQR.xcodeproj -scheme ScreenQR \
+          TEST_RUNNER_DUO_STATE=closed xcodebuild test -project ScreenQR.xcodeproj -scheme ScreenQR \
             -destination "id=$DUO" -resultBundlePath "Shots-duo.xcresult" \
             -only-testing:ScreenQRUITests/AppStoreScreenshots \
             -retry-tests-on-failure -test-iterations 2 \
@@ -111,6 +118,7 @@ jobs:
           xcrun simctl shutdown "$DUO" || true
           grep -q "\*\* TEST SUCCEEDED \*\*" "test-duo.log"
       - name: Capture iPhone and iPad screens
+        if: inputs.devices != 'duo'
         run: |
           bash "$RUNNER_TEMP/boot.sh" "$IPHONE" "$IPAD"
           set -o pipefail
@@ -152,11 +160,13 @@ jobs:
         run: |
           python3 -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/pip" install --quiet pillow
-          "$RUNNER_TEMP/venv/bin/python" AppStore/compose.py raw-iphone out
-          "$RUNNER_TEMP/venv/bin/python" AppStore/compose.py --ipad raw-ipad out
+          if [ "${{ inputs.devices }}" != duo ]; then
+            "$RUNNER_TEMP/venv/bin/python" AppStore/compose.py raw-iphone out
+            "$RUNNER_TEMP/venv/bin/python" AppStore/compose.py --ipad raw-ipad out
+          fi
           if [ "$(ls raw-duo/*.png 2>/dev/null | wc -l)" -ge 6 ]; then
             "$RUNNER_TEMP/venv/bin/python" AppStore/compose.py --duo raw-duo out
-          else
+          elif [ "${{ inputs.devices }}" != iphone-ipad ]; then
             echo "::warning::아이폰 듀오 화면을 다 찍지 못해서 듀오 이미지는 이번에 만들지 않았어요"
           fi
           sips -g pixelWidth -g pixelHeight out/*.png
@@ -169,13 +179,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          (cd out && zip -q ../ScreenQR-AppStore-images.zip *.png)
+          # zip에는 이번에 새로 만든 것과 릴리스에 이미 있는 나머지를 함께 담는다 (기기를 골라 실행했을 때도 전부 들어가게).
+          mkdir -p all
+          gh release download screenqr-appstore --pattern "*.png" --dir all --clobber || true
+          cp out/*.png all/
+          (cd all && zip -q ../ScreenQR-AppStore-images.zip *.png)
           TITLE="Screen QR Scanner 앱 스토어 이미지"
           NOTES="App Store Connect에 순서대로(1→6) 올리면 돼요. 검색 결과에는 앞의 3장이 나와요.
           - 아이폰 6.3형 칸(1206×2622): screenshot-1~6-…-1206x2622
           - 아이폰 6.9형 칸(1320×2868): screenshot-1~6
           - 아이패드 13형 칸(2064×2752): ipad-screenshot-1~6
-          - 아이폰 듀오 칸(2853×2007, 펼친 화면): duo-screenshot-1~6
+          - 아이폰 듀오 칸(1398×2034, 접은 화면): duo-screenshot-1~6
           - 헤더: header-3840x1646(헤더 전용) · header-5244x2950(헤더와 검색 결과 겸용, PNG)
           - ScreenQR-AppStore-images.zip: 전부 (커밋 ${GITHUB_SHA::7})"
           if gh release view screenqr-appstore >/dev/null 2>&1; then
@@ -201,7 +215,7 @@ jobs:
             echo "=====END $(basename "$f")====="
           done
       - name: Check the iPhone Duo images
-        if: always()
+        if: always() && inputs.devices != 'iphone-ipad'
         run: |
           # 듀오 촬영은 다른 이미지를 막지 않으려고 실패해도 넘어가므로, 여기서 빠졌는지 알린다.
           COUNT=$(ls out/duo-screenshot-*.png 2>/dev/null | wc -l)

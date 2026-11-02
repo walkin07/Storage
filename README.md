@@ -123,11 +123,11 @@ GitHub의 **Releases → screenqr-appstore**에 앱 스토어용 이미지가 �
 | iPhone 6.3형 | `screenshot-1` ~ `screenshot-6`의 `-1206x2622` | 1206×2622 |
 | iPhone 6.9형 | `screenshot-1` ~ `screenshot-6` | 1320×2868 |
 | iPad 13형 | `ipad-screenshot-1` ~ `ipad-screenshot-6` | 2064×2752 |
-| iPhone Duo (펼친 화면) | `duo-screenshot-1` ~ `duo-screenshot-6` | 2853×2007 |
+| iPhone Duo (접은 화면) | `duo-screenshot-1` ~ `duo-screenshot-6` | 1398×2034 |
 | 헤더 | `header-3840x1646` (헤더 전용) · `header-5244x2950` (헤더와 검색 결과 겸용, PNG) | |
 
 - 아이패드도 지원하므로 iPad 13형 칸에도 올려야 심사에 낼 수 있습니다. 아이폰 듀오 칸은 넣으면 제품 페이지에 듀오 최적화 표시가 붙습니다.
-- 스크린샷은 실제 앱 화면을 6.9형 iPhone · 13형 iPad · 아이폰 듀오(펼친 안쪽 화면) 시뮬레이터에서 찍어(9:41 상태 막대) 문구와 기기 틀을 입힌 것입니다. 문구는 `AppStore/compose.py`의 `SHOTS`에서 고치고, Actions 탭의 **App Store images** 워크플로를 실행하면 다시 만들어집니다.
+- 스크린샷은 실제 앱 화면을 6.9형 iPhone · 13형 iPad · 아이폰 듀오(접은 바깥 화면) 시뮬레이터에서 찍어(9:41 상태 막대) 문구와 기기 틀을 입힌 것입니다. 문구는 `AppStore/compose.py`의 `SHOTS`에서 고치고, Actions 탭의 **App Store images** 워크플로를 실행하면 다시 만들어집니다 (기기를 고르면 그 기기 이미지만 다시 찍습니다).
 - 헤더는 `AppStore/header-*.png` 그림을 그대로 올립니다. 바꾸려면 같은 이름 · 같은 크기로 바꿔 넣으면 됩니다.
 
 ## 브라우저 확장 설치
