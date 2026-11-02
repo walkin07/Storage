@@ -48,6 +48,8 @@ jobs:
           grep -E "error:" build.log | sort -u | head -100 || true
       - name: Check Safari extension bundle
         run: |
+          # 앱 스토어 제출에 필요한 개인정보 매니페스트(UserDefaults 사용 이유)가 앱에 들어갔는지
+          test -f build/Build/Products/Release-iphoneos/ScreenQR.app/PrivacyInfo.xcprivacy || { echo "missing PrivacyInfo.xcprivacy"; exit 1; }
           APPEX=build/Build/Products/Release-iphoneos/ScreenQR.app/PlugIns/ScreenQRSafari.appex
           ls -R "$APPEX"
           for f in Info.plist manifest.json popup.html popup.js popup.css images/icon-128.png images/toolbar-38.png; do
