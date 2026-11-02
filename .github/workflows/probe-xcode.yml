@@ -1,0 +1,45 @@
+name: Probe Xcode
+
+# 임시: 아이패드 · 아이폰 듀오 대응에 쓸 수 있는 실행기의 Xcode, iOS SDK, 시뮬레이터를 확인한다.
+on:
+  push:
+    paths:
+      - ".github/workflows/probe-xcode.yml"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [xcode-27, macos-26, macos-15]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: System
+        run: |
+          sw_vers
+          ls -d /Applications/Xcode*.app
+          xcode-select -p
+      - name: Xcode versions, SDKs, simulator apps
+        run: |
+          for x in /Applications/Xcode_2[67]*.app; do
+            [ -L "$x" ] && continue
+            echo "=== $x"
+            DEVELOPER_DIR="$x/Contents/Developer" xcodebuild -version || true
+            DEVELOPER_DIR="$x/Contents/Developer" xcodebuild -showsdks 2>/dev/null | grep -i -E "ios" || true
+            ls "$x/Contents/Developer/Applications" || true
+          done
+      - name: Simulators (newest Xcode)
+        run: |
+          X=$(ls -d /Applications/Xcode_2[67]*.app | sort -V | tail -1)
+          echo "using $X"
+          export DEVELOPER_DIR="$X/Contents/Developer"
+          xcrun simctl list runtimes
+          xcrun simctl list devicetypes | grep -i -E "iphone|ipad" || true
+          xcrun simctl list devices available | grep -i -E "duo|ipad|^== |^-- " || true
+      - name: simctl commands
+        run: |
+          X=$(ls -d /Applications/Xcode_2[67]*.app | sort -V | tail -1)
+          export DEVELOPER_DIR="$X/Contents/Developer"
+          xcrun simctl help 2>&1 | sed -n '1,90p'
+          xcrun simctl help 2>&1 | grep -i -E "fold|posture|hinge|display|pose" || echo "no fold-related subcommands"
