@@ -117,15 +117,33 @@ jobs:
           echo "simulator: $PICK"
           test -n "$PICK"
           echo "UDID=${PICK%% *}" >> "$GITHUB_ENV"
+      # 시뮬레이터를 먼저 다 켜 둔다. 새 실행기에서 처음 켜는 시뮬레이터는 오래 걸려서,
+      # 테스트와 함께 켜면 테스트 실행기가 제때 뜨지 못한다 (Timed out waiting for AX loaded notification).
+      - name: Boot the simulator
+        run: |
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
       - name: UI test
         run: |
           set -o pipefail
           # 앱 스토어 이미지용 촬영(AppStoreScreenshots)은 appstore.yml에서 6.9형 시뮬레이터로 따로 한다.
-          xcodebuild test -project ScreenQR.xcodeproj -scheme ScreenQR \
-            -destination "id=$UDID" -resultBundlePath UITests.xcresult \
-            -skip-testing:ScreenQRUITests/AppStoreScreenshots \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
-          grep -q "\*\* TEST SUCCEEDED \*\*" test.log
+          run_tests() {
+            rm -rf UITests.xcresult
+            xcodebuild test -project ScreenQR.xcodeproj -scheme ScreenQR \
+              -destination "id=$UDID" -resultBundlePath UITests.xcresult \
+              -skip-testing:ScreenQRUITests/AppStoreScreenshots \
+              CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
+            grep -q "\*\* TEST SUCCEEDED \*\*" test.log
+          }
+          if ! run_tests; then
+            # 테스트가 아니라 테스트 실행기가 뜨지 못해 실패했을 때만 한 번 더 돌린다.
+            if grep -q -E "failed to initialize for UI testing|Timed out waiting for AX loaded" test.log; then
+              echo "::warning::UI 테스트 실행기가 제때 뜨지 못해 한 번 더 돌립니다."
+              run_tests
+            else
+              exit 1
+            fi
+          fi
       - name: Show test errors
         if: failure()
         run: |
