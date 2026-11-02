@@ -44,10 +44,15 @@ final class AppStoreScreenshots: XCTestCase {
         shoot("35-make", ["UITEST", "-tutorial.done", "YES", "-uitest.mode", "make", "-uitest.makeInput", "https://example.com"]) { app in
             guard app.images["QR 코드"].waitForExistence(timeout: 30) else { return false }
             // 접은 아이폰 듀오(바깥 화면)는 세로가 짧아서 QR과 공유 · 저장 · 복사 버튼이 아래로 잘린다.
-            // 화면을 끝까지 올려서 QR 카드가 다 보이게 찍는다.
+            // 입력 칸 카드의 위쪽 여백이 화면 맨 위에 오도록 천천히 올려서(손을 떼도 더 미끄러지지 않게)
+            // 입력 칸부터 QR 카드까지 한 화면에 담는다.
             if Self.duoClosed {
-                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
-                start.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)))
+                let distance = app.staticTexts["링크나 글"].frame.minY - 36
+                if distance > 0 {
+                    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9))
+                    let end = start.withOffset(CGVector(dx: 0, dy: -distance))
+                    start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
+                }
             }
             return true
         }
