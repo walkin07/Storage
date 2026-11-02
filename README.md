@@ -119,9 +119,10 @@ TestFlight 빌드는 90일 동안 쓸 수 있고, 새로 push하면 자동으로
 GitHub의 **Releases → screenqr-appstore**에 앱 스토어용 이미지가 올라갑니다.
 
 - `screenshot-1` ~ `screenshot-6`: 1320×2868 (6.9형 iPhone). App Store Connect의 스크린샷에 순서대로 올리면 검색 결과에는 앞의 3장이 나옵니다.
+- `ipad-screenshot-1` ~ `ipad-screenshot-6`: 2064×2752 (13형 iPad). 아이패드도 지원하므로 App Store Connect의 iPad 13형 칸에 올려야 심사에 낼 수 있습니다.
 - `header-1920x1080`: 헤더/홍보 이미지 (인앱 이벤트 카드, 피처링 요청, 웹·SNS 등)
 
-실제 앱 화면을 6.9형 시뮬레이터에서 찍어(9:41 상태 막대) 문구와 기기 틀을 입힌 것입니다. 문구는 `AppStore/compose.py`의 `SHOTS`에서 고치고, Actions 탭의 **App Store images** 워크플로를 실행하면 다시 만들어집니다.
+실제 앱 화면을 6.9형 iPhone · 13형 iPad 시뮬레이터에서 찍어(9:41 상태 막대) 문구와 기기 틀을 입힌 것입니다. 문구는 `AppStore/compose.py`의 `SHOTS`에서 고치고, Actions 탭의 **App Store images** 워크플로를 실행하면 다시 만들어집니다.
 
 ## 브라우저 확장 설치
 
