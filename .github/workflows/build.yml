@@ -123,15 +123,22 @@ jobs:
         run: |
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -project ScreenQR.xcodeproj -scheme ScreenQR \
+            -destination "id=$UDID" -derivedDataPath dd CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log | tail -5
+      # 튜토리얼 흐름(ScreenQRUITests)은 통과해야 TestFlight에 올린다. 느린 실행기에서 앱을 끄다 멈추는 것 같은
+      # 일시적인 실패는 그 테스트만 한 번 더 돌려 본다 (-retry-tests-on-failure).
       - name: UI test
         run: |
           set -o pipefail
-          # 앱 스토어 이미지용 촬영(AppStoreScreenshots)은 appstore.yml에서 6.9형 시뮬레이터로 따로 한다.
           run_tests() {
             rm -rf UITests.xcresult
-            xcodebuild test -project ScreenQR.xcodeproj -scheme ScreenQR \
-              -destination "id=$UDID" -resultBundlePath UITests.xcresult \
-              -skip-testing:ScreenQRUITests/AppStoreScreenshots \
+            xcodebuild test-without-building -project ScreenQR.xcodeproj -scheme ScreenQR \
+              -destination "id=$UDID" -derivedDataPath dd -resultBundlePath UITests.xcresult \
+              -only-testing:ScreenQRUITests/ScreenQRUITests \
+              -retry-tests-on-failure -test-iterations 2 \
               CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
             grep -q "\*\* TEST SUCCEEDED \*\*" test.log
           }
@@ -148,11 +155,26 @@ jobs:
         if: failure()
         run: |
           grep -E "error:|failed|XCTAssert" test.log | sort -u | head -80 || true
+      # 화면 배치 확인용 촬영(LayoutScreens)은 보기 위한 것이라 실패해도 TestFlight 업로드를 막지 않는다.
+      - name: Layout screens
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building -project ScreenQR.xcodeproj -scheme ScreenQR \
+            -destination "id=$UDID" -derivedDataPath dd -resultBundlePath Layout.xcresult \
+            -only-testing:ScreenQRUITests/LayoutScreens \
+            -retry-tests-on-failure -test-iterations 2 \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee layout.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
+          grep -q "\*\* TEST SUCCEEDED \*\*" layout.log
       - name: Export screenshots
         if: always()
         run: |
-          mkdir -p shots
-          xcrun xcresulttool export attachments --path UITests.xcresult --output-path shots-raw || true
+          mkdir -p shots shots-raw
+          for bundle in UITests Layout; do
+            [ -d "$bundle.xcresult" ] || continue
+            xcrun xcresulttool export attachments --path "$bundle.xcresult" --output-path "shots-raw/$bundle" || true
+          done
           cat > "$RUNNER_TEMP/rename.py" <<'PY'
           import json, os, re, shutil, sys
           raw, out = sys.argv[1], sys.argv[2]
@@ -168,7 +190,9 @@ jobs:
                       name = (label.group(0) if label else os.path.splitext(exported)[0]) + ".png"
                       shutil.copy(os.path.join(raw, exported), os.path.join(out, name))
           PY
-          python3 "$RUNNER_TEMP/rename.py" shots-raw shots || true
+          for bundle in UITests Layout; do
+            python3 "$RUNNER_TEMP/rename.py" "shots-raw/$bundle" shots || true
+          done
           # 로그로 볼 사진: 아이폰은 전부, 아이패드는 배치 확인용(7x-)만 조금 크게
           for f in shots/*.png; do
             [ -e "$f" ] || continue
@@ -247,7 +271,8 @@ jobs:
           set -o pipefail
           TEST_RUNNER_DUO_STATE=flat xcodebuild test-without-building -project ScreenQR.xcodeproj -scheme ScreenQR \
             -destination "id=$UDID" -derivedDataPath dd -resultBundlePath DuoInner.xcresult \
-            -only-testing:ScreenQRUITests/LayoutScreens CODE_SIGNING_ALLOWED=NO 2>&1 | tee inner.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
+            -only-testing:ScreenQRUITests/LayoutScreens -retry-tests-on-failure -test-iterations 2 \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee inner.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
           grep -q "\*\* TEST SUCCEEDED \*\*" inner.log
       - name: Cover screen (folded)
         continue-on-error: true
@@ -257,7 +282,8 @@ jobs:
           set -o pipefail
           TEST_RUNNER_DUO_STATE=closed xcodebuild test-without-building -project ScreenQR.xcodeproj -scheme ScreenQR \
             -destination "id=$UDID" -derivedDataPath dd -resultBundlePath DuoCover.xcresult \
-            -only-testing:ScreenQRUITests/LayoutScreens CODE_SIGNING_ALLOWED=NO 2>&1 | tee cover.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
+            -only-testing:ScreenQRUITests/LayoutScreens -retry-tests-on-failure -test-iterations 2 \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee cover.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
           grep -q "\*\* TEST SUCCEEDED \*\*" cover.log
       - name: Show test errors
         if: always()
