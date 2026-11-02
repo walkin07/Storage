@@ -116,13 +116,19 @@ TestFlight 빌드는 90일 동안 쓸 수 있고, 새로 push하면 자동으로
 
 ## 앱 스토어 이미지
 
-GitHub의 **Releases → screenqr-appstore**에 앱 스토어용 이미지가 올라갑니다.
+GitHub의 **Releases → screenqr-appstore**에 앱 스토어용 이미지가 올라갑니다. App Store Connect의 각 칸에 순서대로(1→6) 올리면 검색 결과에는 앞의 3장이 나옵니다.
 
-- `screenshot-1` ~ `screenshot-6`: 1320×2868 (6.9형 iPhone). App Store Connect의 스크린샷에 순서대로 올리면 검색 결과에는 앞의 3장이 나옵니다.
-- `ipad-screenshot-1` ~ `ipad-screenshot-6`: 2064×2752 (13형 iPad). 아이패드도 지원하므로 App Store Connect의 iPad 13형 칸에 올려야 심사에 낼 수 있습니다.
-- `header-1920x1080`: 헤더/홍보 이미지 (인앱 이벤트 카드, 피처링 요청, 웹·SNS 등)
+| App Store Connect 칸 | 파일 | 크기 |
+| --- | --- | --- |
+| iPhone 6.3형 | `screenshot-1` ~ `screenshot-6`의 `-1206x2622` | 1206×2622 |
+| iPhone 6.9형 | `screenshot-1` ~ `screenshot-6` | 1320×2868 |
+| iPad 13형 | `ipad-screenshot-1` ~ `ipad-screenshot-6` | 2064×2752 |
+| iPhone Duo (펼친 화면) | `duo-screenshot-1` ~ `duo-screenshot-6` | 2853×2007 |
+| 헤더 | `header-3840x1646` (헤더 전용) · `header-5244x2950` (헤더와 검색 결과 겸용, PNG) | |
 
-실제 앱 화면을 6.9형 iPhone · 13형 iPad 시뮬레이터에서 찍어(9:41 상태 막대) 문구와 기기 틀을 입힌 것입니다. 문구는 `AppStore/compose.py`의 `SHOTS`에서 고치고, Actions 탭의 **App Store images** 워크플로를 실행하면 다시 만들어집니다.
+- 아이패드도 지원하므로 iPad 13형 칸에도 올려야 심사에 낼 수 있습니다. 아이폰 듀오 칸은 넣으면 제품 페이지에 듀오 최적화 표시가 붙습니다.
+- 스크린샷은 실제 앱 화면을 6.9형 iPhone · 13형 iPad · 아이폰 듀오(펼친 안쪽 화면) 시뮬레이터에서 찍어(9:41 상태 막대) 문구와 기기 틀을 입힌 것입니다. 문구는 `AppStore/compose.py`의 `SHOTS`에서 고치고, Actions 탭의 **App Store images** 워크플로를 실행하면 다시 만들어집니다.
+- 헤더는 `AppStore/header-*.png` 그림을 그대로 올립니다. 바꾸려면 같은 이름 · 같은 크기로 바꿔 넣으면 됩니다.
 
 ## 브라우저 확장 설치
 
@@ -151,12 +157,12 @@ Chrome 웹 스토어(1회 $5)나 Edge 부가 기능(무료)에 올리면 개발�
 ## 구조
 
 - `ScreenQR/`: iOS 앱 (Liquid Glass 홈 화면, 첫 실행 단축어 튜토리얼, 단축어 액션 App Intent, Vision 기반 QR 인식)
-- `ScreenQRUITests/`: 시뮬레이터에서 튜토리얼을 끝까지 넘겨 보는 UI 테스트 (CI가 페이지마다 스크린샷을 남김). `LayoutScreens`는 아이폰 · 아이패드(세로·가로) · 아이폰 듀오(접은·펼친 화면)에서 주요 화면을 찍어 배치를 확인합니다
+- `ScreenQRUITests/`: 시뮬레이터에서 튜토리얼을 끝까지 넘겨 보는 UI 테스트 (CI가 페이지마다 스크린샷을 남김). `LayoutScreens`는 아이폰 · 아이패드(세로·가로) · 아이폰 듀오(접은·펼친 화면)에서 주요 화면을 찍어 배치를 확인합니다 (듀오는 화면이 둘이라 `DuoScreen`이 찍을 화면을 고릅니다)
 - `SafariExtension/`: iOS Safari 확장 (네이티브 Vision으로 인식)
 - `browser-extension/`: Chrome/Edge/Firefox 등 공용 확장 (Manifest V3, ZXing WASM으로 인식)
   - `vendor/zxing-reader.js`, `vendor/zxing_reader.wasm`: [zxing-wasm](https://github.com/Sec-ant/zxing-wasm) 3.1.5 (MIT)
 - `.github/workflows/build.yml`: iOS 앱 빌드(서명 없는 IPA), 시뮬레이터 UI 테스트(아이폰 · 아이패드 · 아이폰 듀오), 확장 검사·패키징, Releases 업로드, TestFlight 업로드. 아이폰 듀오를 접고 펴는 데는 공개 도구 [duo-fold-control](https://github.com/tosbaha/duo-fold-control)(MIT)의 `duo-hinge`를 고정 버전으로 받아 씁니다
-- `.github/workflows/appstore.yml`, `AppStore/compose.py`: 앱 스토어 이미지 만들기
+- `.github/workflows/appstore.yml`, `AppStore/compose.py`, `AppStore/header-*.png`: 앱 스토어 이미지 만들기
 - 직접 Xcode로 빌드하려면: `brew install xcodegen && xcodegen generate` 후 두 타깃 모두 Team 선택 (iOS 26 이상 지원, Xcode 27.1 이상)
 
 ## 다른 앱

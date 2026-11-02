@@ -1,8 +1,11 @@
 name: App Store images
 
-# 앱 스토어에 올릴 이미지(아이폰 스크린샷 6장 1320×2868 + 헤더 1920×1080 + 아이패드 스크린샷 6장 2064×2752)를
-# 실제 앱 화면으로 만든다. 6.9형 iPhone과 13형 iPad 시뮬레이터에서 화면을 찍고(AppStoreScreenshots UI 테스트),
-# AppStore/compose.py가 문구와 기기 틀을 입힌다.
+# 앱 스토어에 올릴 이미지를 실제 앱 화면으로 만든다.
+# - 아이폰 스크린샷 6장: 1320×2868(6.9형) + 같은 그림을 줄인 1206×2622(6.3형)
+# - 아이패드 스크린샷 6장: 2064×2752(13형)
+# - 아이폰 듀오 스크린샷 6장: 2853×2007(펼친 안쪽 화면)
+# - 헤더 이미지: 3840×1646 · 5244×2950 (AppStore/에 있는 SQRS 로고 그림)
+# 시뮬레이터에서 화면을 찍고(AppStoreScreenshots UI 테스트), AppStore/compose.py가 문구와 기기 틀을 입힌다.
 # 결과는 "screenqr-appstore" 릴리스에 올라간다. Actions 탭에서 직접 실행하거나 아래 파일이 바뀌면 실행된다.
 on:
   workflow_dispatch:
@@ -10,6 +13,7 @@ on:
     paths:
       - "AppStore/**"
       - "ScreenQRUITests/AppStoreScreenshots.swift"
+      - "ScreenQRUITests/DuoScreen.swift"
       - ".github/workflows/appstore.yml"
 
 jobs:
@@ -32,7 +36,7 @@ jobs:
         run: brew install xcodegen
       - name: Generate project
         run: xcodegen generate
-      - name: Pick the simulators (6.9-inch iPhone, 13-inch iPad)
+      - name: Pick the simulators (6.9-inch iPhone, 13-inch iPad, iPhone Duo)
         run: |
           cat > "$RUNNER_TEMP/pick.py" <<'PY'
           import json, sys
@@ -48,9 +52,14 @@ jobs:
                       if not name.startswith("iPhone") or "Pro Max" not in name:
                           continue
                       score = (name == "iPhone 17 Pro Max", runtime, name)
-                  else:
+                  elif want == "ipad":
                       # 2064×2752 (App Store 13형)
                       if not name.startswith("iPad Pro 13-inch"):
+                          continue
+                      score = (runtime, name)
+                  else:
+                      # 아이폰 듀오 (iOS 27.1 런타임)
+                      if name != "iPhone Duo":
                           continue
                       score = (runtime, name)
                   if best is None or score > best[0]:
@@ -59,14 +68,17 @@ jobs:
           PY
           IPHONE=$(xcrun simctl list devices available -j | python3 "$RUNNER_TEMP/pick.py" iphone)
           IPAD=$(xcrun simctl list devices available -j | python3 "$RUNNER_TEMP/pick.py" ipad)
+          DUO=$(xcrun simctl list devices available -j | python3 "$RUNNER_TEMP/pick.py" duo)
           echo "iPhone: $IPHONE"
           echo "iPad: $IPAD"
-          test -n "$IPHONE" && test -n "$IPAD"
+          echo "iPhone Duo: $DUO"
+          test -n "$IPHONE" && test -n "$IPAD" && test -n "$DUO"
           echo "IPHONE=${IPHONE%% *}" >> "$GITHUB_ENV"
           echo "IPAD=${IPAD%% *}" >> "$GITHUB_ENV"
-      - name: Boot the simulators with a clean status bar (9:41)
-        run: |
-          for UDID in "$IPHONE" "$IPAD"; do
+          echo "DUO=${DUO%% *}" >> "$GITHUB_ENV"
+          # 시뮬레이터를 켜고 상태 막대를 9:41로 고정한다.
+          cat > "$RUNNER_TEMP/boot.sh" <<'SH'
+          for UDID in "$@"; do
             xcrun simctl boot "$UDID" || true
             xcrun simctl bootstatus "$UDID" -b
             xcrun simctl status_bar "$UDID" override --time "9:41" \
@@ -74,8 +86,33 @@ jobs:
               --cellularMode active --cellularBars 4 \
               --batteryState discharging --batteryLevel 100
           done
-      - name: Capture screens
+          SH
+      # 아이폰 듀오는 펼친 안쪽 화면을 찍는다. Xcode에는 접고 펴는 명령이 없어서, Device Hub의 경첩 슬라이더와
+      # 같은 신호를 보내는 공개 도구 duo-hinge(MIT, github.com/tosbaha/duo-fold-control)를 고정된 버전 · 해시로 받아 쓴다.
+      # 비공개 시뮬레이터 기능에 기대므로, 여기서 실패해도 아이폰 · 아이패드 이미지는 그대로 만든다.
+      - name: Capture iPhone Duo screens (unfolded)
+        id: duo
+        continue-on-error: true
+        timeout-minutes: 30
         run: |
+          curl -fsSL -o "$RUNNER_TEMP/duo-hinge.m" \
+            "https://raw.githubusercontent.com/tosbaha/duo-fold-control/6207cc897648959c3c2213ac3a2dcf38f6f9eb41/tools/duo-hinge.m"
+          echo "771a6ef85afaa95ed2868b35c2966872e958e2675042edf940e396a411ffdb0c  $RUNNER_TEMP/duo-hinge.m" | shasum -a 256 -c -
+          clang -fobjc-arc -framework Foundation -o "$RUNNER_TEMP/duo-hinge" "$RUNNER_TEMP/duo-hinge.m"
+          bash "$RUNNER_TEMP/boot.sh" "$DUO"
+          DEVELOPER_DIR="$(xcode-select -p)" "$RUNNER_TEMP/duo-hinge" -d "$DUO" flat
+          sleep 3
+          set -o pipefail
+          TEST_RUNNER_DUO_STATE=flat xcodebuild test -project ScreenQR.xcodeproj -scheme ScreenQR \
+            -destination "id=$DUO" -resultBundlePath "Shots-duo.xcresult" \
+            -only-testing:ScreenQRUITests/AppStoreScreenshots \
+            -retry-tests-on-failure -test-iterations 2 \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee "test-duo.log" | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
+          xcrun simctl shutdown "$DUO" || true
+          grep -q "\*\* TEST SUCCEEDED \*\*" "test-duo.log"
+      - name: Capture iPhone and iPad screens
+        run: |
+          bash "$RUNNER_TEMP/boot.sh" "$IPHONE" "$IPAD"
           set -o pipefail
           for DEVICE in iphone ipad; do
             if [ "$DEVICE" = iphone ]; then UDID="$IPHONE"; else UDID="$IPAD"; fi
@@ -87,13 +124,15 @@ jobs:
             grep -q "\*\* TEST SUCCEEDED \*\*" "test-$DEVICE.log"
           done
       - name: Show test errors
-        if: failure()
+        if: always()
         run: |
-          grep -h -E "error:|failed|XCTAssert" test-*.log | sort -u | head -80 || true
+          grep -h -E "error:|failed|XCTAssert" test-*.log 2>/dev/null | sort -u | head -80 || true
       - name: Export raw screens
         run: |
-          for DEVICE in iphone ipad; do
-            xcrun xcresulttool export attachments --path "Shots-$DEVICE.xcresult" --output-path "raw-export-$DEVICE"
+          for DEVICE in iphone ipad duo; do
+            [ -d "Shots-$DEVICE.xcresult" ] || { echo "no $DEVICE screens"; continue; }
+            xcrun xcresulttool export attachments --path "Shots-$DEVICE.xcresult" --output-path "raw-export-$DEVICE" || true
+            [ -f "raw-export-$DEVICE/manifest.json" ] || { echo "no $DEVICE attachments"; continue; }
             python3 - "raw-export-$DEVICE" "raw-$DEVICE" <<'PY'
           import json, os, re, shutil, sys
           source, target = sys.argv[1], sys.argv[2]
@@ -107,7 +146,7 @@ jobs:
                       shutil.copy(os.path.join(source, exported), os.path.join(target, match.group(1) + ".png"))
           print(target, sorted(os.listdir(target)))
           PY
-            sips -g pixelWidth -g pixelHeight "raw-$DEVICE"/*.png
+            sips -g pixelWidth -g pixelHeight -g orientation "raw-$DEVICE"/*.png || true
           done
       - name: Compose App Store images
         run: |
@@ -115,6 +154,11 @@ jobs:
           "$RUNNER_TEMP/venv/bin/pip" install --quiet pillow
           "$RUNNER_TEMP/venv/bin/python" AppStore/compose.py raw-iphone out
           "$RUNNER_TEMP/venv/bin/python" AppStore/compose.py --ipad raw-ipad out
+          if [ "$(ls raw-duo/*.png 2>/dev/null | wc -l)" -ge 6 ]; then
+            "$RUNNER_TEMP/venv/bin/python" AppStore/compose.py --duo raw-duo out
+          else
+            echo "::warning::아이폰 듀오 화면을 다 찍지 못해서 듀오 이미지는 이번에 만들지 않았어요"
+          fi
           sips -g pixelWidth -g pixelHeight out/*.png
       - uses: actions/upload-artifact@v4
         with:
@@ -127,18 +171,27 @@ jobs:
         run: |
           (cd out && zip -q ../ScreenQR-AppStore-images.zip *.png)
           TITLE="Screen QR Scanner 앱 스토어 이미지"
-          NOTES="screenshot-1~6: 1320×2868 (6.9형 iPhone, App Store Connect에 순서대로 올리면 검색 결과에는 앞의 3장이 나와요) · ipad-screenshot-1~6: 2064×2752 (13형 iPad) · header-1920x1080: 헤더/홍보 이미지 · ScreenQR-AppStore-images.zip: 전부 (커밋 ${GITHUB_SHA::7})"
+          NOTES="App Store Connect에 순서대로(1→6) 올리면 돼요. 검색 결과에는 앞의 3장이 나와요.
+          - 아이폰 6.3형 칸(1206×2622): screenshot-1~6-…-1206x2622
+          - 아이폰 6.9형 칸(1320×2868): screenshot-1~6
+          - 아이패드 13형 칸(2064×2752): ipad-screenshot-1~6
+          - 아이폰 듀오 칸(2853×2007, 펼친 화면): duo-screenshot-1~6
+          - 헤더: header-3840x1646(헤더 전용) · header-5244x2950(헤더와 검색 결과 겸용, PNG)
+          - ScreenQR-AppStore-images.zip: 전부 (커밋 ${GITHUB_SHA::7})"
           if gh release view screenqr-appstore >/dev/null 2>&1; then
             gh release upload screenqr-appstore out/*.png ScreenQR-AppStore-images.zip --clobber
             gh release edit screenqr-appstore --title "$TITLE" --notes "$NOTES"
+            # 예전 1920×1080 헤더는 App Store Connect가 받지 않아서 지운다.
+            gh release delete-asset screenqr-appstore header-1920x1080.png -y || true
           else
             gh release create screenqr-appstore out/*.png ScreenQR-AppStore-images.zip --target "$GITHUB_SHA" --prerelease --title "$TITLE" --notes "$NOTES"
           fi
       - name: Print images (base64, for review)
         run: |
           mkdir -p preview
-          # 원본 크기 이미지는 릴리스에 있으니, 로그에는 확인용으로 줄여서 남긴다.
+          # 원본 크기 이미지는 릴리스에 있으니, 로그에는 확인용으로 줄여서 남긴다 (6.3형 사본과 헤더는 빼고).
           for f in out/*.png; do
+            case "$f" in *-1206x2622.png|*header-*) continue ;; esac
             sips -s format jpeg -s formatOptions 85 --resampleWidth 900 "$f" --out "preview/$(basename "${f%.png}").jpg" >/dev/null
           done
           ls -la preview
@@ -147,3 +200,10 @@ jobs:
             base64 -b 4000 -i "$f"
             echo "=====END $(basename "$f")====="
           done
+      - name: Check the iPhone Duo images
+        if: always()
+        run: |
+          # 듀오 촬영은 다른 이미지를 막지 않으려고 실패해도 넘어가므로, 여기서 빠졌는지 알린다.
+          COUNT=$(ls out/duo-screenshot-*.png 2>/dev/null | wc -l)
+          echo "iPhone Duo images: $COUNT"
+          test "$COUNT" -ge 6

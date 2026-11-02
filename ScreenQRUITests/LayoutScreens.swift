@@ -65,9 +65,8 @@ final class LayoutScreens: XCTestCase {
     @MainActor
     private func capture(_ number: Int, _ name: String, _ arguments: [String], _ wait: Wait) {
         let isPad = UIDevice.current.userInterfaceIdiom == .pad
-        let duoState = ProcessInfo.processInfo.environment["DUO_STATE"]
         let device: String
-        switch duoState {
+        switch DuoScreen.state {
         case "flat": device = "duo-inner"
         case "closed": device = "duo-cover"
         default: device = isPad ? "ipad" : "iphone"
@@ -93,24 +92,12 @@ final class LayoutScreens: XCTestCase {
             XCUIDevice.shared.orientation = orientation
             sleep(2)
             XCTAssertTrue(element.exists, "\(device) \(name)\(suffix): 돌린 뒤에도 같은 화면이어야 함")
-            let attachment = XCTAttachment(screenshot: Self.screenshot(inner: duoState == "flat"))
+            let attachment = XCTAttachment(screenshot: DuoScreen.screenshot())
             // CI가 이름의 ‘숫자-영문’ 부분으로 파일 이름을 만든다 (예: 70-ipad-welcome-portrait).
             attachment.name = "\(number)-\(device)-\(name)\(suffix)"
             attachment.lifetime = .keepAlways
             add(attachment)
         }
         XCUIDevice.shared.orientation = .portrait
-    }
-
-    /// 지금 켜진 화면을 찍는다. 아이폰 듀오는 화면이 둘이라(XCUIScreen.main은 늘 바깥 화면)
-    /// 크기로 구분해서, 펼쳤으면 큰 안쪽 화면을, 접었으면 작은 바깥 화면을 고른다.
-    @MainActor
-    private static func screenshot(inner: Bool) -> XCUIScreenshot {
-        let screens = XCUIScreen.screens
-        guard screens.count > 1 else { return XCUIScreen.main.screenshot() }
-        let shots = screens.map { $0.screenshot() }.sorted {
-            $0.image.size.width * $0.image.size.height < $1.image.size.width * $1.image.size.height
-        }
-        return (inner ? shots.last : shots.first) ?? XCUIScreen.main.screenshot()
     }
 }
