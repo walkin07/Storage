@@ -143,13 +143,16 @@ jobs:
             grep -q -E "\*\* TEST (EXECUTE )?SUCCEEDED \*\*" test.log
           }
           if ! run_tests; then
-            # 테스트가 아니라 테스트 실행기가 뜨지 못해 실패했을 때만 한 번 더 돌린다.
-            if grep -q -E "failed to initialize for UI testing|Timed out waiting for AX loaded" test.log; then
-              echo "::warning::UI 테스트 실행기가 제때 뜨지 못해 한 번 더 돌립니다."
-              run_tests
-            else
+            # 실패한 테스트가 있으면 그대로 실패. 실패한 테스트 없이 멈췄다면 시뮬레이터 쪽 문제라
+            # (테스트 실행기가 제때 뜨지 못함, SpringBoard가 죽음 등) 시뮬레이터를 다시 켜고 한 번 더 돌린다.
+            if grep -q -E "Test Case '.*' failed" test.log; then
               exit 1
             fi
+            echo "::warning::시뮬레이터 문제로 테스트가 끝까지 돌지 못해, 시뮬레이터를 다시 켜고 한 번 더 돌립니다."
+            xcrun simctl shutdown "$UDID" || true
+            xcrun simctl boot "$UDID" || true
+            xcrun simctl bootstatus "$UDID" -b
+            run_tests
           fi
       - name: Show test errors
         if: failure()
