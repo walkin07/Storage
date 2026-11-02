@@ -93,16 +93,48 @@ struct TutorialDevice: Equatable {
     /// 넓은 화면으로 쓰는 중 (아이패드, 펼친 아이폰 듀오).
     /// 이때 단축어 앱은 아이폰과 배치가 달라질 수 있어서 ‘동작 검색’이 어디 있는지 말하지 않는다.
     var wide = false
+    /// 동작 버튼이 없는 것으로 알려진 아이폰 (아이폰 듀오)
+    var lacksActionButton = false
+
+    /// 지금 기기
+    @MainActor
+    static func current(horizontalSizeClass: UserInterfaceSizeClass?) -> TutorialDevice {
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        return TutorialDevice(
+            isPad: isPad,
+            wide: isPad || horizontalSizeClass == .regular,
+            lacksActionButton: DeviceModel.lacksActionButton
+        )
+    }
 
     var name: String { isPad ? "아이패드" : "아이폰" }
 
     /// 고를 수 있는 실행 방법. 처음에는 맨 앞의 것이 골라져 있다.
     var triggers: [Trigger] {
-        isPad ? [.controlCenter, .pencilSqueeze, .assistiveTouch] : [.backTap, .actionButton, .controlCenter]
+        if isPad { return [.controlCenter, .pencilSqueeze, .assistiveTouch] }
+        // 아이폰 듀오는 동작 버튼 대신 AssistiveTouch를 보여 준다.
+        return lacksActionButton ? [.backTap, .controlCenter, .assistiveTouch] : [.backTap, .actionButton, .controlCenter]
     }
 
     /// ‘바로 시험해 보기’ 안내에 드는 예
     var triggerExample: String { isPad ? "제어 센터 등" : "뒷면 톡톡 등" }
+}
+
+/// 기기 모델 이름 (예: iPhone19,4). 시뮬레이터에서는 흉내 내는 기기의 이름이다.
+enum DeviceModel {
+    static let identifier: String = {
+        if let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] {
+            return simulated
+        }
+        var info = utsname()
+        uname(&info)
+        return withUnsafeBytes(of: &info.machine) { bytes in
+            String(decoding: bytes.prefix(while: { $0 != 0 }), as: UTF8.self)
+        }
+    }()
+
+    /// 동작 버튼이 없는 최신 아이폰 (iPhone19,4: 아이폰 듀오). 모르는 모델은 동작 버튼이 있다고 본다.
+    static var lacksActionButton: Bool { ["iPhone19,4"].contains(identifier) }
 }
 
 /// 튜토리얼 페이지가 쓸 수 있는 공간(위·아래 막대를 뺀 영역)에 맞춘 배치
@@ -273,7 +305,7 @@ struct TutorialView: View {
     ) {
         let saved = TutorialPage(rawValue: UserDefaults.standard.integer(forKey: TutorialKeys.page)) ?? .welcome
         _page = State(initialValue: start ?? saved)
-        _trigger = State(initialValue: TutorialDevice(isPad: UIDevice.current.userInterfaceIdiom == .pad).triggers[0])
+        _trigger = State(initialValue: TutorialDevice.current(horizontalSizeClass: nil).triggers[0])
         self.entry = entry
         self.testPassed = testPassed
         self.onClose = onClose
@@ -281,8 +313,7 @@ struct TutorialView: View {
 
     /// 실행 방법 · 문구 · 그림을 고를 때 쓰는 기기 정보 (아이패드인지, 넓은 화면인지)
     private var device: TutorialDevice {
-        let isPad = UIDevice.current.userInterfaceIdiom == .pad
-        return TutorialDevice(isPad: isPad, wide: isPad || horizontalSizeClass == .regular)
+        TutorialDevice.current(horizontalSizeClass: horizontalSizeClass)
     }
 
     /// 위쪽 오른쪽 자리에 무엇을 둘지

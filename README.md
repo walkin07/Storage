@@ -93,7 +93,7 @@ TestFlight 빌드는 90일 동안 쓸 수 있고, 새로 push하면 자동으로
 | AssistiveTouch (아이패드 · 아이폰) | 설정 → 손쉬운 사용 → 터치 → AssistiveTouch 켜기 → 이중 탭 → 만든 단축어 |
 | Safari | 설정 → 앱 → Safari → 확장 프로그램 → Screen QR Scanner 켜기 |
 
-튜토리얼의 실행 방법 페이지는 기기에 맞는 것만 보여 줍니다 (아이폰: 뒷면 탭 · 동작 버튼 · 제어 센터, 아이패드: 제어 센터 · Apple Pencil · AssistiveTouch).
+튜토리얼의 실행 방법 페이지는 기기에 맞는 것만 보여 줍니다 (아이폰: 뒷면 탭 · 동작 버튼 · 제어 센터, 동작 버튼이 없는 아이폰 듀오: 뒷면 탭 · 제어 센터 · AssistiveTouch, 아이패드: 제어 센터 · Apple Pencil · AssistiveTouch).
 
 ## 아이패드 · 아이폰 듀오
 
