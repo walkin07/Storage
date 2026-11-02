@@ -159,32 +159,11 @@ struct QRMakerView: View {
                 .lineLimit(3)
                 .multilineTextAlignment(.center)
                 .textSelection(.enabled)
-            HStack(spacing: 10) {
-                ShareLink(item: Image(uiImage: image), preview: SharePreview("QR 코드", image: Image(uiImage: image))) {
-                    Label("공유", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(.black)
-                .simultaneousGesture(TapGesture().onEnded { tapTick += 1 })
-                Button {
-                    Task { await save(image) }
-                } label: {
-                    Label("저장", systemImage: "square.and.arrow.down")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glass)
-                Button {
-                    UIPasteboard.general.image = image
-                    message = "QR 이미지를 복사했어요"
-                    doneTick += 1
-                } label: {
-                    Label("복사", systemImage: "doc.on.doc")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glass)
+            // 폭이 좁은 화면(접은 아이폰 듀오 등)에서는 버튼을 한 단계 작게 해서 글자가 두 줄로 꺾이지 않게 한다.
+            ViewThatFits(in: .horizontal) {
+                actionButtons(image).controlSize(.large)
+                actionButtons(image).controlSize(.regular)
             }
-            .controlSize(.large)
             if let message {
                 Text(message)
                     .font(.footnote)
@@ -194,6 +173,38 @@ struct QRMakerView: View {
         .padding(20)
         .frame(maxWidth: .infinity)
         .glassEffect(.regular, in: .rect(cornerRadius: 28))
+    }
+
+    /// 공유 · 저장 · 복사 버튼 (글자는 한 줄로)
+    private func actionButtons(_ image: UIImage) -> some View {
+        HStack(spacing: 10) {
+            ShareLink(item: Image(uiImage: image), preview: SharePreview("QR 코드", image: Image(uiImage: image))) {
+                Label("공유", systemImage: "square.and.arrow.up")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glassProminent)
+            .tint(.black)
+            .simultaneousGesture(TapGesture().onEnded { tapTick += 1 })
+            Button {
+                Task { await save(image) }
+            } label: {
+                Label("저장", systemImage: "square.and.arrow.down")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glass)
+            Button {
+                UIPasteboard.general.image = image
+                message = "QR 이미지를 복사했어요"
+                doneTick += 1
+            } label: {
+                Label("복사", systemImage: "doc.on.doc")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glass)
+        }
     }
 
     private func save(_ image: UIImage) async {
