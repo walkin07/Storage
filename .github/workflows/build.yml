@@ -140,7 +140,7 @@ jobs:
               -only-testing:ScreenQRUITests/ScreenQRUITests \
               -retry-tests-on-failure -test-iterations 2 \
               CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
-            grep -q "\*\* TEST SUCCEEDED \*\*" test.log
+            grep -q -E "\*\* TEST (EXECUTE )?SUCCEEDED \*\*" test.log
           }
           if ! run_tests; then
             # 테스트가 아니라 테스트 실행기가 뜨지 못해 실패했을 때만 한 번 더 돌린다.
@@ -166,7 +166,7 @@ jobs:
             -only-testing:ScreenQRUITests/LayoutScreens \
             -retry-tests-on-failure -test-iterations 2 \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee layout.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
-          grep -q "\*\* TEST SUCCEEDED \*\*" layout.log
+          grep -q -E "\*\* TEST (EXECUTE )?SUCCEEDED \*\*" layout.log
       - name: Export screenshots
         if: always()
         run: |
@@ -273,7 +273,7 @@ jobs:
             -destination "id=$UDID" -derivedDataPath dd -resultBundlePath DuoInner.xcresult \
             -only-testing:ScreenQRUITests/LayoutScreens -retry-tests-on-failure -test-iterations 2 \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee inner.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
-          grep -q "\*\* TEST SUCCEEDED \*\*" inner.log
+          grep -q -E "\*\* TEST (EXECUTE )?SUCCEEDED \*\*" inner.log
       - name: Cover screen (folded)
         continue-on-error: true
         run: |
@@ -284,7 +284,7 @@ jobs:
             -destination "id=$UDID" -derivedDataPath dd -resultBundlePath DuoCover.xcresult \
             -only-testing:ScreenQRUITests/LayoutScreens -retry-tests-on-failure -test-iterations 2 \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee cover.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
-          grep -q "\*\* TEST SUCCEEDED \*\*" cover.log
+          grep -q -E "\*\* TEST (EXECUTE )?SUCCEEDED \*\*" cover.log
       - name: Show test errors
         if: always()
         run: |
