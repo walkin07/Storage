@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """앱 스토어 이미지 만들기.
 
-6.9형 iPhone 시뮬레이터에서 찍은 원본 화면(1320×2868)에 문구와 기기 틀을 입혀
-- 스크린샷 6장: 1320×2868 (App Store Connect의 6.9형 크기. 검색 결과에는 앞의 3장이 나온다)
+시뮬레이터에서 찍은 원본 화면에 문구와 기기 틀을 입혀
+- 아이폰 스크린샷 6장: 1320×2868 (6.9형 iPhone 원본에서. 검색 결과에는 앞의 3장이 나온다)
 - 헤더 이미지 1장: 1920×1080
+- 아이패드 스크린샷 6장: 2064×2752 (13형 iPad 원본에서, --ipad)
 을 만든다. macOS의 Apple SD Gothic Neo 글꼴을 쓴다 (appstore.yml 워크플로에서 실행).
 
 사용: python3 AppStore/compose.py <원본 폴더> <결과 폴더>
+      python3 AppStore/compose.py --ipad <아이패드 원본 폴더> <결과 폴더>
 """
 import os
 import sys
@@ -29,6 +31,17 @@ SHOTS = [
     ("35-make", "5-make-qr", "링크로 QR 만들기", "공유 · 저장 · 복사까지 한 번에"),
     ("36-safari", "6-safari", "Safari에서는\n단축어 없이도", "주소창 메뉴에서 바로 열어요"),
 ]
+
+# 아이패드: 같은 화면이지만 아이패드에는 뒷면 탭이 없어서 두 번째 문구가 다르다.
+IPAD_SHOTS = [
+    ("31-welcome", "1-screen-qr", "화면 속 QR,\n버튼 한 번으로", "캡처하고 저장할 필요 없이 바로 열려요"),
+    ("32-run", "2-run", "제어 센터 · Apple Pencil로\n어디서든 한 번에", "어떤 앱에서든 화면 속 QR을 바로 열어요"),
+    ("33-steps", "3-tutorial", "1분이면 끝나는 설정", "튜토리얼이 한 단계씩 알려 줘요"),
+    ("34-photo", "4-photo", "사진 속 QR도 바로", "링크는 바로 열고, 글은 내용을 보여 줘요"),
+    ("35-make", "5-make-qr", "링크로 QR 만들기", "공유 · 저장 · 복사까지 한 번에"),
+    ("36-safari", "6-safari", "Safari에서는\n단축어 없이도", "주소창 메뉴에서 바로 열어요"),
+]
+IPAD_W, IPAD_H = 2064, 2752
 
 FONT_PATHS = [
     "/System/Library/Fonts/AppleSDGothicNeo.ttc",
@@ -87,12 +100,15 @@ def draw_lines(draw, text, text_font, top, color, left=None, width=None, spacing
     return y - line_height + ascent + descent
 
 
-def device(shot, height):
-    """원본 화면을 줄여 둥근 모서리 · 검은 테두리 · 다이내믹 아일랜드를 입힌 아이폰 (RGBA, 전체 높이 = height)"""
-    scale = height / (shot.height + 80)
+def device(shot, height, tablet=False):
+    """원본 화면을 줄여 둥근 모서리 · 검은 테두리 · 다이내믹 아일랜드를 입힌 아이폰 (RGBA, 전체 높이 = height).
+    tablet이면 테두리가 더 두껍고 모서리가 덜 둥근 아이패드 (다이내믹 아일랜드 없음)."""
+    border = 110 if tablet else 40
+    scale = height / (shot.height + border * 2)
     screen_w, screen_h = round(shot.width * scale), round(shot.height * scale)
-    bezel = round(40 * scale)
-    radius = round(186 * scale)  # 화면 모서리 (약 62pt × 3)
+    bezel = round(border * scale)
+    # 화면 모서리: 아이폰 약 62pt × 3, 아이패드 약 18pt × 2
+    radius = round((36 if tablet else 186) * scale)
     frame_w, frame_h = screen_w + bezel * 2, screen_h + bezel * 2
 
     out = Image.new("RGBA", (frame_w, frame_h), (0, 0, 0, 0))
@@ -107,6 +123,8 @@ def device(shot, height):
     mask = Image.new("L", (screen_w, screen_h), 0)
     ImageDraw.Draw(mask).rounded_rectangle([0, 0, screen_w - 1, screen_h - 1], radius=radius, fill=255)
     out.paste(screen, (bezel, bezel), mask)
+    if tablet:
+        return out
 
     # 시뮬레이터 스크린샷에는 다이내믹 아일랜드가 찍히지 않아서 그려 넣는다 (약 126×37pt, 위에서 11pt).
     island_w, island_h = round(378 * scale), round(111 * scale)
@@ -130,23 +148,24 @@ def paste_with_shadow(canvas, item, x, y, blur=46, offset=34, strength=0.28):
     canvas.paste(item, (x, y), item)
 
 
-def screenshot(raw, title, subtitle):
-    canvas = background(W, H)
+def screenshot(raw, title, subtitle, tablet=False):
+    width, height = (IPAD_W, IPAD_H) if tablet else (W, H)
+    canvas = background(width, height)
     draw = ImageDraw.Draw(canvas)
-    title_font = font("Bold", 116)
-    sub_font = font("Medium", 54)
+    title_font = font("Bold", 124 if tablet else 116)
+    sub_font = font("Medium", 58 if tablet else 54)
 
     # 글은 위쪽 영역(기기 위) 가운데에
-    device_top = 720
+    device_top = 700 if tablet else 720
     _, _, title_h = text_block(title, title_font, 1.12)
     _, _, sub_h = text_block(subtitle, sub_font, 1.2)
     block_h = title_h + 40 + sub_h
     top = max(130, (device_top - 70 - block_h) // 2 + 40)
-    y = draw_lines(draw, title, title_font, top, INK, width=W, spacing=1.12)
-    draw_lines(draw, subtitle, sub_font, y + 40, GRAY, width=W, spacing=1.2)
+    y = draw_lines(draw, title, title_font, top, INK, width=width, spacing=1.12)
+    draw_lines(draw, subtitle, sub_font, y + 40, GRAY, width=width, spacing=1.2)
 
-    phone = device(raw, H - device_top - 90)
-    paste_with_shadow(canvas, phone, (W - phone.width) // 2, device_top)
+    frame = device(raw, height - device_top - 90, tablet=tablet)
+    paste_with_shadow(canvas, frame, (width - frame.width) // 2, device_top)
     return canvas
 
 
@@ -180,7 +199,25 @@ def header(raws):
     return canvas
 
 
+def main_ipad(source, destination):
+    """13형 아이패드 원본으로 아이패드 스크린샷 6장 (2064×2752)"""
+    os.makedirs(destination, exist_ok=True)
+    for name, output, title, subtitle in IPAD_SHOTS:
+        path = os.path.join(source, name + ".png")
+        if not os.path.exists(path):
+            raise SystemExit(f"원본 화면이 없어요: {path}")
+        raw = Image.open(path)
+        print(name, raw.size)
+        image = screenshot(raw, title, subtitle, tablet=True)
+        path = os.path.join(destination, f"ipad-screenshot-{output}.png")
+        image.convert("RGB").save(path, optimize=True)
+        print("saved", path, image.size)
+
+
 def main():
+    if sys.argv[1] == "--ipad":
+        main_ipad(sys.argv[2], sys.argv[3])
+        return
     source, destination = sys.argv[1], sys.argv[2]
     os.makedirs(destination, exist_ok=True)
     raws = {}
