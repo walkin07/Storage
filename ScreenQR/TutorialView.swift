@@ -23,9 +23,9 @@ enum TutorialMotion {
     static let frozen = ProcessInfo.processInfo.arguments.contains("UITEST")
 }
 
-/// 단축어를 실행할 방법
+/// 단축어를 실행할 방법. 아이폰과 아이패드에서 고를 수 있는 것이 다르다 (TutorialDevice.triggers).
 enum Trigger: String, CaseIterable, Identifiable {
-    case backTap, actionButton, controlCenter
+    case backTap, actionButton, controlCenter, pencilSqueeze, assistiveTouch
 
     var id: Self { self }
 
@@ -34,6 +34,8 @@ enum Trigger: String, CaseIterable, Identifiable {
         case .backTap: "뒷면 탭"
         case .actionButton: "동작 버튼"
         case .controlCenter: "제어 센터"
+        case .pencilSqueeze: "Apple Pencil"
+        case .assistiveTouch: "AssistiveTouch"
         }
     }
 
@@ -42,6 +44,8 @@ enum Trigger: String, CaseIterable, Identifiable {
         case .backTap: "hand.tap"
         case .actionButton: "button.horizontal.top.press"
         case .controlCenter: "switch.2"
+        case .pencilSqueeze: "pencil.tip"
+        case .assistiveTouch: "circle.circle"
         }
     }
 
@@ -57,7 +61,7 @@ enum Trigger: String, CaseIterable, Identifiable {
             [
                 "설정 → 동작 버튼",
                 "옆으로 넘겨 ‘단축어’를 고르고, 방금 만든 단축어를 선택해요",
-                "동작 버튼을 길게 누르면 실행돼요 (iPhone 15 Pro · 16 이후 모델)",
+                "동작 버튼을 길게 누르면 실행돼요 (iPhone 15 Pro · 16 이후 모델, 아이폰 듀오 제외)",
             ]
         case .controlCenter:
             [
@@ -66,6 +70,91 @@ enum Trigger: String, CaseIterable, Identifiable {
                 "단축어 앱에서 그 단축어에 ‘대기’(1초)를 넣고 맨 위로 옮겨요. 제어 센터가 닫힌 뒤에 찍혀요",
                 "제어 센터에서 한 번 누르면 실행돼요",
             ]
+        case .pencilSqueeze:
+            [
+                "설정 → Apple Pencil → 스퀴즈",
+                "‘단축어’를 고르고, 방금 만든 단축어를 선택해요",
+                "Apple Pencil Pro를 살짝 쥐면 실행돼요 (Apple Pencil Pro 전용)",
+            ]
+        case .assistiveTouch:
+            [
+                "설정 → 손쉬운 사용 → 터치 → AssistiveTouch를 켜요",
+                "‘이중 탭’을 누르고, 아래쪽 단축어 목록에서 방금 만든 단축어를 골라요",
+                "화면에 떠 있는 AssistiveTouch 버튼을 두 번 톡톡 누르면 실행돼요",
+            ]
+        }
+    }
+}
+
+/// 기기에 따라 달라지는 안내. 아이패드에는 뒷면 탭 · 동작 버튼이 없고, 단축어 앱 · Safari 화면 배치도 다르다.
+struct TutorialDevice: Equatable {
+    /// 아이패드 (아이폰 듀오는 아이폰이다)
+    var isPad = false
+    /// 넓은 화면으로 쓰는 중 (아이패드, 펼친 아이폰 듀오).
+    /// 이때 단축어 앱은 아이폰과 배치가 달라질 수 있어서 ‘동작 검색’이 어디 있는지 말하지 않는다.
+    var wide = false
+
+    var name: String { isPad ? "아이패드" : "아이폰" }
+
+    /// 고를 수 있는 실행 방법. 처음에는 맨 앞의 것이 골라져 있다.
+    var triggers: [Trigger] {
+        isPad ? [.controlCenter, .pencilSqueeze, .assistiveTouch] : [.backTap, .actionButton, .controlCenter]
+    }
+
+    /// ‘바로 시험해 보기’ 안내에 드는 예
+    var triggerExample: String { isPad ? "제어 센터 등" : "뒷면 톡톡 등" }
+}
+
+/// 튜토리얼 페이지가 쓸 수 있는 공간(위·아래 막대를 뺀 영역)에 맞춘 배치
+struct TutorialLayout: Equatable {
+    let size: CGSize
+
+    /// 가로로 넓은 화면(아이패드 가로, 펼친 아이폰 듀오 등): 그림과 설명을 나란히 둔다.
+    var sideBySide: Bool { size.width >= 700 && size.width > size.height * 1.1 }
+
+    /// 세로가 짧은 화면(작은 아이폰 등): 그림을 조금 줄인다.
+    var compact: Bool { !sideBySide && size.height < 620 }
+
+    /// 세로가 아주 짧은 화면(접은 아이폰 듀오의 바깥 화면 등): 더 줄여서 아래 버튼까지 한눈에 보이게 한다.
+    var tight: Bool { !sideBySide && size.height < 520 }
+
+    /// 세로로 넉넉한 화면(아이패드 세로 등): 내용을 위아래 가운데에 둔다.
+    var roomy: Bool { !sideBySide && size.height >= 800 }
+
+    /// 단축어 · Safari 그림 높이 (줄이기 전)
+    var artHeight: CGFloat {
+        if sideBySide { return min(max(size.height - 48, 260), 400) }
+        return compact ? 236 : 290
+    }
+
+    /// 아주 짧은 화면에서는 그림을 통째로 줄인다 (그림 속 글씨와 간격의 비율은 그대로).
+    var artScale: CGFloat { tight ? 0.83 : 1 }
+
+    /// 그림 · 제목 · 설명 사이 간격
+    var spacing: CGFloat { tight ? 14 : (compact ? 18 : 24) }
+
+    /// 내용이 너무 넓게 퍼지지 않게 (가운데 정렬)
+    var maxWidth: CGFloat { sideBySide ? 860 : 560 }
+
+    /// 나란히 둘 때 그림 칸 너비
+    static let artWidth: CGFloat = 300
+    /// 나란히 둘 때 설명 칸 최대 너비
+    static let textWidth: CGFloat = 420
+}
+
+/// 그림을 원래 크기(너비 300)로 그린 뒤 artScale만큼 줄이고, 줄어든 크기만큼만 자리를 차지하게 한다.
+private struct ArtScale: ViewModifier {
+    let layout: TutorialLayout
+
+    func body(content: Content) -> some View {
+        let scale = layout.artScale
+        if scale < 1 {
+            content
+                .frame(width: TutorialLayout.artWidth, height: layout.artHeight)
+                .scaleEffect(scale)
+                .frame(width: TutorialLayout.artWidth * scale, height: layout.artHeight * scale)
+        } else {
+            content
         }
     }
 }
@@ -100,7 +189,7 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
         }
     }
 
-    var lines: [Text] {
+    func lines(on device: TutorialDevice) -> [Text] {
         switch self {
         case .open:
             [
@@ -109,7 +198,8 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
             ]
         case .screenshot:
             [
-                Text("단축어 앱 아래쪽 ‘동작 검색’을 눌러요"),
+                // 아이폰은 아래쪽에 있다. 넓은 화면의 단축어 앱은 배치가 달라질 수 있어 위치를 말하지 않는다.
+                Text(device.wide ? "단축어 앱에서 ‘동작 검색’을 눌러요" : "단축어 앱 아래쪽 ‘동작 검색’을 눌러요"),
                 Text("‘스크린샷’을 입력하고 ‘스크린샷 찍기’를 눌러요"),
             ]
         case .qr:
@@ -156,7 +246,7 @@ struct TutorialView: View {
     @State private var page: TutorialPage
     @State private var forward = true
     @State private var lastMove = Date.distantPast
-    @State private var trigger: Trigger = .backTap
+    @State private var trigger: Trigger
     /// 이번에 새 단축어를 이미 만들었으면 다시 눌러도 단축어 앱만 연다 (빈 단축어가 여러 개 생기지 않게).
     @State private var createdShortcut = false
     @State private var awaitingReturn = false
@@ -172,6 +262,7 @@ struct TutorialView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     /// - Parameter start: 시작할 페이지. nil이면 보던 페이지부터 (처음 설치했으면 ‘튜토리얼 보기 / 건너뛰기’ 화면)
     init(
@@ -182,9 +273,16 @@ struct TutorialView: View {
     ) {
         let saved = TutorialPage(rawValue: UserDefaults.standard.integer(forKey: TutorialKeys.page)) ?? .welcome
         _page = State(initialValue: start ?? saved)
+        _trigger = State(initialValue: TutorialDevice(isPad: UIDevice.current.userInterfaceIdiom == .pad).triggers[0])
         self.entry = entry
         self.testPassed = testPassed
         self.onClose = onClose
+    }
+
+    /// 실행 방법 · 문구 · 그림을 고를 때 쓰는 기기 정보 (아이패드인지, 넓은 화면인지)
+    private var device: TutorialDevice {
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        return TutorialDevice(isPad: isPad, wide: isPad || horizontalSizeClass == .regular)
     }
 
     /// 위쪽 오른쪽 자리에 무엇을 둘지
@@ -359,6 +457,9 @@ struct TutorialView: View {
                 .transition(.opacity.combined(with: .offset(y: 12)))
             }
         }
+        // 아이패드처럼 넓은 화면에서 버튼이 화면 끝까지 늘어나지 않게
+        .frame(maxWidth: 440)
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
         .padding(.top, 8)
         .padding(.bottom, showsSkip ? 4 : 12)
@@ -374,34 +475,38 @@ struct TutorialView: View {
 
     private func pageContent(_ item: TutorialPage) -> some View {
         GeometryReader { proxy in
-            let compact = proxy.size.height < 620
+            let layout = TutorialLayout(size: proxy.size)
+            let info = self.device
             ScrollView {
                 Group {
                     switch item {
                     case .welcome:
-                        WelcomePage(still: still, compact: compact)
+                        WelcomePage(still: still, layout: layout, device: info)
                     case .open, .screenshot, .qr:
                         StepPage(
                             page: item,
                             still: still,
-                            compact: compact,
+                            layout: layout,
+                            device: info,
                             returned: returnedPages.contains(item),
                             failedToOpen: failedPage == item,
                             onOpenShortcuts: openShortcuts
                         )
                     case .finish:
-                        FinishPage(trigger: $trigger, testPassed: testPassed, still: still)
+                        FinishPage(trigger: $trigger, testPassed: testPassed, still: still, layout: layout, device: info)
                     case .safari:
-                        SafariPage(still: still, compact: compact, returned: returnedPages.contains(.safari))
+                        SafariPage(still: still, layout: layout, device: info, returned: returnedPages.contains(.safari))
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 16)
-                .padding(.bottom, 24)
+                .padding(.horizontal, layout.sideBySide ? 32 : 24)
+                .padding(.top, layout.tight ? 8 : 16)
+                .padding(.bottom, layout.tight ? 16 : 24)
+                // 넓은 화면에서는 가운데에 모으고, 세로로 넉넉하면 위아래도 가운데에 둔다.
+                .frame(maxWidth: layout.maxWidth)
                 .frame(
                     maxWidth: .infinity,
                     minHeight: proxy.size.height,
-                    alignment: item == .welcome ? .center : .top
+                    alignment: item == .welcome || layout.sideBySide || layout.roomy ? .center : .top
                 )
             }
             .scrollBounceBehavior(.basedOnSize)
@@ -498,32 +603,47 @@ struct TutorialView: View {
 
 private struct WelcomePage: View {
     let still: Bool
-    let compact: Bool
+    let layout: TutorialLayout
+    let device: TutorialDevice
 
     var body: some View {
-        VStack(spacing: compact ? 22 : 30) {
-            WelcomeHero(still: still)
-                .scaleEffect(compact ? 0.8 : 1)
-                .frame(height: compact ? 256 : 320)
-            VStack(spacing: 12) {
-                Text(TutorialPage.welcome.title)
-                    .font(.largeTitle.bold())
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("단축어를 하나 만들어 두면, 어떤 앱에서든 화면에 보이는 QR을 바로 열 수 있어요.")
+        let sideBySide = layout.sideBySide
+        let spacing: CGFloat = layout.tight ? 16 : (layout.compact ? 22 : 30)
+        // 넓은 화면에서는 그림 옆에 글을 둔다. 같은 뷰를 배치만 바꿔서 화면을 돌려도 그림 애니메이션이 이어진다.
+        let stack = sideBySide
+            ? AnyLayout(HStackLayout(alignment: .center, spacing: 48))
+            : AnyLayout(VStackLayout(spacing: spacing))
+        stack {
+            WelcomeHero(still: still, tablet: device.isPad)
+                .scaleEffect(heroScale)
+                .frame(height: 320 * heroScale)
+            VStack(alignment: sideBySide ? .leading : .center, spacing: sideBySide ? 24 : spacing) {
+                VStack(alignment: sideBySide ? .leading : .center, spacing: 12) {
+                    Text(TutorialPage.welcome.title)
+                        .font(.largeTitle.bold())
+                        .multilineTextAlignment(sideBySide ? .leading : .center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("단축어를 하나 만들어 두면, 어떤 앱에서든 화면에 보이는 QR을 바로 열 수 있어요.")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(sideBySide ? .leading : .center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Label("\(device.name)에서는 앱이 다른 앱 화면을 찍을 수 없어서, 화면 캡처는 단축어가 맡아요.", systemImage: "info.circle")
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.black.opacity(0.04), in: .rect(cornerRadius: 18, style: .continuous))
             }
-            Label("아이폰에서는 앱이 다른 앱 화면을 찍을 수 없어서, 화면 캡처는 단축어가 맡아요.", systemImage: "info.circle")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.black.opacity(0.04), in: .rect(cornerRadius: 18, style: .continuous))
+            .frame(maxWidth: sideBySide ? TutorialLayout.textWidth : CGFloat.infinity)
         }
+    }
+
+    private var heroScale: CGFloat {
+        if layout.tight { return 0.66 }
+        return layout.compact ? 0.8 : 1
     }
 }
 
@@ -532,7 +652,8 @@ private struct WelcomePage: View {
 private struct StepPage: View {
     let page: TutorialPage
     let still: Bool
-    let compact: Bool
+    let layout: TutorialLayout
+    let device: TutorialDevice
     let returned: Bool
     let failedToOpen: Bool
     let onOpenShortcuts: () -> Void
@@ -546,14 +667,16 @@ private struct StepPage: View {
     init(
         page: TutorialPage,
         still: Bool,
-        compact: Bool,
+        layout: TutorialLayout,
+        device: TutorialDevice,
         returned: Bool,
         failedToOpen: Bool,
         onOpenShortcuts: @escaping () -> Void
     ) {
         self.page = page
         self.still = still
-        self.compact = compact
+        self.layout = layout
+        self.device = device
         self.returned = returned
         self.failedToOpen = failedToOpen
         self.onOpenShortcuts = onOpenShortcuts
@@ -563,18 +686,34 @@ private struct StepPage: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: compact ? 18 : 24) {
-            ShortcutMock(scene: scene, showsBackLink: page == .open, still: still)
-                .frame(height: compact ? 236 : 290)
+        // 넓은 화면에서는 그림 옆에 설명을 둔다. 배치만 바꾸므로 화면을 돌려도 그림 애니메이션이 끊기지 않는다.
+        let stack = layout.sideBySide
+            ? AnyLayout(HStackLayout(alignment: .center, spacing: 40))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: layout.spacing))
+        stack {
+            ShortcutMock(scene: scene, showsBackLink: page == .open, still: still, tablet: device.isPad)
+                .frame(height: layout.artHeight)
+                .modifier(ArtScale(layout: layout))
                 .overlay {
                     if showHint {
-                        NextHintCard(text: page.nextHint, still: still)
+                        NextHintCard(text: page.nextHint, still: still, corner: device.isPad ? 24 : 34)
                             .transition(.opacity.combined(with: .scale(scale: 0.97)))
                             // 반복 중에 잠깐 나오는 장면은 그림의 일부라 VoiceOver에는 단축어 앱에 다녀온 뒤에만 알린다.
                             .accessibilityHidden(!returned)
                     }
                 }
-                .frame(maxWidth: .infinity)
+                .frame(width: layout.sideBySide ? TutorialLayout.artWidth : nil)
+                .frame(maxWidth: layout.sideBySide ? nil : CGFloat.infinity)
+            details
+                .frame(maxWidth: layout.sideBySide ? TutorialLayout.textWidth : CGFloat.infinity, alignment: .leading)
+        }
+        // 단축어 앱에서 돌아오면(returned) 처음부터 다시: 안내 장면부터 보여 준다.
+        .task(id: returned) { await play() }
+    }
+
+    /// 단계 제목 · 설명 · 단축어 앱 열기
+    private var details: some View {
+        VStack(alignment: .leading, spacing: layout.spacing) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("\(page.stepNumber ?? 1) / \(TutorialPage.stepCount) 단계")
                     .font(.subheadline.weight(.semibold))
@@ -583,8 +722,8 @@ private struct StepPage: View {
                     .font(.title2.bold())
                     .fixedSize(horizontal: false, vertical: true)
             }
-            VStack(alignment: .leading, spacing: 14) {
-                ForEach(Array(page.lines.enumerated()), id: \.offset) { index, line in
+            VStack(alignment: .leading, spacing: layout.tight ? 10 : 14) {
+                ForEach(Array(page.lines(on: device).enumerated()), id: \.offset) { index, line in
                     TutorialStepRow(number: index + 1, text: line, style: style(for: index))
                 }
             }
@@ -607,8 +746,6 @@ private struct StepPage: View {
                 .transition(.opacity)
             }
         }
-        // 단축어 앱에서 돌아오면(returned) 처음부터 다시: 안내 장면부터 보여 준다.
-        .task(id: returned) { await play() }
     }
 
     private func style(for index: Int) -> StepRowStyle {
@@ -810,9 +947,15 @@ private struct FinishPage: View {
     @Binding var trigger: Trigger
     let testPassed: Bool
     let still: Bool
+    let layout: TutorialLayout
+    let device: TutorialDevice
 
     var body: some View {
-        VStack(spacing: 24) {
+        // 넓은 화면에서는 완성 표시 옆에 실행 방법 카드를 둔다.
+        let stack = layout.sideBySide
+            ? AnyLayout(HStackLayout(alignment: .center, spacing: 40))
+            : AnyLayout(VStackLayout(spacing: 24))
+        stack {
             VStack(spacing: 14) {
                 DrawnCheck(still: still)
                 Text(TutorialPage.finish.title)
@@ -822,8 +965,10 @@ private struct FinishPage: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.top, 8)
+            .padding(.top, layout.sideBySide ? 0 : 8)
+            .frame(maxWidth: layout.sideBySide ? CGFloat(300) : nil)
             triggerCard
+                .frame(maxWidth: layout.sideBySide ? CGFloat(460) : nil)
         }
     }
 
@@ -839,7 +984,7 @@ private struct FinishPage: View {
             }
             GlassEffectContainer(spacing: 8) {
                 HStack(spacing: 8) {
-                    ForEach(Trigger.allCases) { item in
+                    ForEach(device.triggers) { item in
                         TriggerChip(trigger: item, isSelected: item == trigger) {
                             withAnimation(.snappy) { trigger = item }
                         }
@@ -858,7 +1003,7 @@ private struct FinishPage: View {
                 .transition(.opacity.combined(with: .offset(y: 6)))
             }
             Divider()
-            TestRow(passed: testPassed)
+            TestRow(passed: testPassed, example: device.triggerExample)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -871,7 +1016,8 @@ private struct FinishPage: View {
 /// Safari에서는 단축어 없이 확장 프로그램으로 연다. 놓치지 않게 따로 한 페이지로 보여 준다.
 private struct SafariPage: View {
     let still: Bool
-    let compact: Bool
+    let layout: TutorialLayout
+    let device: TutorialDevice
     /// 이 페이지를 보다가 앱 밖(설정 등)에 다녀왔는지. 그때부터 그림 끝에 ‘완료’ 안내가 나온다.
     let returned: Bool
 
@@ -881,9 +1027,10 @@ private struct SafariPage: View {
     /// 그림 반복의 마지막 장면: ‘설정했다면 아래 완료를 눌러 주세요’
     @State private var showHint: Bool
 
-    init(still: Bool, compact: Bool, returned: Bool) {
+    init(still: Bool, layout: TutorialLayout, device: TutorialDevice, returned: Bool) {
         self.still = still
-        self.compact = compact
+        self.layout = layout
+        self.device = device
         self.returned = returned
         _scene = State(initialValue: still ? SafariScene.still : SafariScene())
         _activeLine = State(initialValue: still ? nil : 0)
@@ -891,17 +1038,33 @@ private struct SafariPage: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: compact ? 18 : 24) {
-            SafariMock(scene: scene)
-                .frame(height: compact ? 236 : 290)
+        // 넓은 화면에서는 그림 옆에 설명을 둔다 (StepPage와 같은 배치).
+        let stack = layout.sideBySide
+            ? AnyLayout(HStackLayout(alignment: .center, spacing: 40))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: layout.spacing))
+        stack {
+            // 아이패드 Safari는 주소창이 위에 있다.
+            SafariMock(scene: scene, tablet: device.isPad)
+                .frame(height: layout.artHeight)
+                .modifier(ArtScale(layout: layout))
                 .overlay {
                     if showHint {
-                        NextHintCard(text: TutorialPage.safari.nextHint, still: still)
+                        NextHintCard(text: TutorialPage.safari.nextHint, still: still, corner: device.isPad ? 24 : 34)
                             .transition(.opacity.combined(with: .scale(scale: 0.97)))
                             .accessibilityHidden(!returned)
                     }
                 }
-                .frame(maxWidth: .infinity)
+                .frame(width: layout.sideBySide ? TutorialLayout.artWidth : nil)
+                .frame(maxWidth: layout.sideBySide ? nil : CGFloat.infinity)
+            details
+                .frame(maxWidth: layout.sideBySide ? TutorialLayout.textWidth : CGFloat.infinity, alignment: .leading)
+        }
+        // 앱 밖에 다녀오면(returned) 처음부터 다시: 안내 장면부터 보여 준다.
+        .task(id: returned) { await play() }
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: layout.spacing) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Safari 확장 프로그램")
                     .font(.subheadline.weight(.semibold))
@@ -910,8 +1073,8 @@ private struct SafariPage: View {
                     .font(.title2.bold())
                     .fixedSize(horizontal: false, vertical: true)
             }
-            VStack(alignment: .leading, spacing: 14) {
-                ForEach(Array(TutorialPage.safari.lines.enumerated()), id: \.offset) { index, line in
+            VStack(alignment: .leading, spacing: layout.tight ? 10 : 14) {
+                ForEach(Array(TutorialPage.safari.lines(on: device).enumerated()), id: \.offset) { index, line in
                     TutorialStepRow(number: index + 1, text: line, style: style(for: index))
                 }
             }
@@ -924,8 +1087,6 @@ private struct SafariPage: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.black.opacity(0.04), in: .rect(cornerRadius: 18, style: .continuous))
         }
-        // 앱 밖에 다녀오면(returned) 처음부터 다시: 안내 장면부터 보여 준다.
-        .task(id: returned) { await play() }
     }
 
     private func style(for index: Int) -> StepRowStyle {
@@ -1004,6 +1165,8 @@ private struct SafariPage: View {
 /// 설정한 방법으로 바로 시험해 보는 QR. 단축어로 읽으면 체크로 바뀐다.
 private struct TestRow: View {
     let passed: Bool
+    /// 실행 방법의 예 (아이폰: 뒷면 톡톡 등, 아이패드: 제어 센터 등)
+    let example: String
 
     var body: some View {
         HStack(spacing: 16) {
@@ -1029,7 +1192,7 @@ private struct TestRow: View {
                     .font(.headline)
                 Text(passed
                     ? "단축어가 이 QR을 읽었어요. 이제 어떤 앱에서든 화면 속 QR을 바로 열 수 있어요."
-                    : "이 화면에서 방금 설정한 방법(뒷면 톡톡 등)으로 단축어를 실행해 보세요. 단축어가 이 QR을 읽으면 여기가 ‘잘 동작해요!’로 바뀌어요. 처음 한 번은 ‘항상 허용’을 눌러 주세요.")
+                    : "이 화면에서 방금 설정한 방법(\(example))으로 단축어를 실행해 보세요. 단축어가 이 QR을 읽으면 여기가 ‘잘 동작해요!’로 바뀌어요. 처음 한 번은 ‘항상 허용’을 눌러 주세요.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

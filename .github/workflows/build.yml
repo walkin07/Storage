@@ -21,12 +21,15 @@ on:
 
 jobs:
   ios:
-    runs-on: macos-15
+    # Xcode 27(iOS 27.1 SDK)이 있는 실행기
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode 26
+      - name: Select Xcode 27.1
         run: |
-          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          # 아이폰 듀오의 안쪽 화면을 꽉 채우려면 iOS 27.1 SDK로 빌드해야 한다 (최소 지원은 그대로 iOS 26).
+          XCODE=/Applications/Xcode_27.1.app
+          [ -d "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app | grep -v -i -E "beta|candidate" | sort -V | tail -1)
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
       - name: Install XcodeGen
@@ -62,31 +65,50 @@ jobs:
 
   # 시뮬레이터에서 첫 실행 튜토리얼을 끝까지 넘겨 본다. 스크린샷은 아티팩트로 올리고, 로그에도 작게 남긴다.
   ui-test:
-    runs-on: macos-15
+    runs-on: xcode-27
+    strategy:
+      fail-fast: false
+      matrix:
+        # iphone: 세로 화면 · ipad: 13형 아이패드 세로 + 가로 (LayoutScreens가 돌려 가며 찍는다)
+        device: [iphone, ipad]
+    env:
+      DEVICE: ${{ matrix.device }}
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode 26
+      - name: Select Xcode 27.1
         run: |
-          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          # 아이폰 듀오의 안쪽 화면을 꽉 채우려면 iOS 27.1 SDK로 빌드해야 한다 (최소 지원은 그대로 iOS 26).
+          XCODE=/Applications/Xcode_27.1.app
+          [ -d "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app | grep -v -i -E "beta|candidate" | sort -V | tail -1)
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
         run: xcodegen generate
-      - name: Pick an iPhone simulator
+      - name: Pick a simulator
         run: |
           cat > "$RUNNER_TEMP/pick.py" <<'PY'
-          import json, sys
+          import json, os, sys
+          want = os.environ["DEVICE"]
           best = None
           for runtime, items in json.load(sys.stdin)["devices"].items():
               if "iOS-26" not in runtime and "iOS-27" not in runtime:
                   continue
               for device in items:
                   name = device["name"]
-                  if not name.startswith("iPhone"):
-                      continue
-                  score = ("Pro" in name and "Max" not in name, runtime, name)
+                  if want == "ipad":
+                      if not name.startswith("iPad Pro 13-inch"):
+                          continue
+                      score = (runtime, name)
+                  elif want == "duo":
+                      if name != "iPhone Duo":
+                          continue
+                      score = (runtime, name)
+                  else:
+                      if not name.startswith("iPhone") or "Duo" in name:
+                          continue
+                      score = ("Pro" in name and "Max" not in name, runtime, name)
                   if best is None or score > best[0]:
                       best = (score, device["udid"], name, runtime)
           print(f"{best[1]} {best[2]} {best[3]}" if best else "")
@@ -129,15 +151,131 @@ jobs:
                       shutil.copy(os.path.join(raw, exported), os.path.join(out, name))
           PY
           python3 "$RUNNER_TEMP/rename.py" shots-raw shots || true
+          # 로그로 볼 사진: 아이폰은 전부, 아이패드는 배치 확인용(7x-)만 조금 크게
           for f in shots/*.png; do
             [ -e "$f" ] || continue
-            sips -s format jpeg -s formatOptions 50 --resampleWidth 420 "$f" --out "${f%.png}.jpg" >/dev/null
+            if [ "$DEVICE" = "iphone" ]; then
+              sips -s format jpeg -s formatOptions 50 --resampleWidth 420 "$f" --out "${f%.png}.jpg" >/dev/null
+            else
+              case "$(basename "$f")" in
+                7*) sips -s format jpeg -s formatOptions 50 --resampleWidth 640 "$f" --out "${f%.png}.jpg" >/dev/null ;;
+              esac
+            fi
           done
           ls -la shots
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ScreenQR-screenshots
+          name: ScreenQR-screenshots-${{ matrix.device }}
+          path: shots/*.png
+          if-no-files-found: warn
+      - name: Print screenshots (base64, for review)
+        if: always()
+        run: |
+          for f in shots/*.jpg; do
+            [ -e "$f" ] || continue
+            echo "=====BEGIN $(basename "$f")====="
+            base64 -b 4000 -i "$f"
+            echo "=====END $(basename "$f")====="
+          done
+
+  # 아이폰 듀오: 펼친 안쪽 화면과 접은 바깥 화면에서 주요 화면을 찍는다 (LayoutScreens).
+  # Xcode에는 접고 펴는 명령이 없어서, Device Hub의 경첩 슬라이더와 같은 신호를 보내는 공개 도구
+  # duo-hinge(MIT, github.com/tosbaha/duo-fold-control)를 고정된 버전 · 해시로 받아 쓴다.
+  # 비공개 시뮬레이터 기능에 기대는 확인용 작업이라 TestFlight 업로드를 막지 않는다.
+  duo:
+    runs-on: xcode-27
+    env:
+      DEVICE: duo
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 27.1
+        run: |
+          XCODE=/Applications/Xcode_27.1.app
+          [ -d "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app | grep -v -i -E "beta|candidate" | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Boot the iPhone Duo simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          found = [(r, d["udid"]) for r, items in json.load(sys.stdin)["devices"].items() for d in items if d["name"] == "iPhone Duo"]
+          print(max(found)[1] if found else "")')
+          echo "simulator: $UDID"
+          test -n "$UDID"
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -project ScreenQR.xcodeproj -scheme ScreenQR \
+            -destination "id=$UDID" -derivedDataPath dd CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log | tail -5
+      - name: Fold tool (duo-hinge)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/duo-hinge.m" \
+            "https://raw.githubusercontent.com/tosbaha/duo-fold-control/6207cc897648959c3c2213ac3a2dcf38f6f9eb41/tools/duo-hinge.m"
+          echo "771a6ef85afaa95ed2868b35c2966872e958e2675042edf940e396a411ffdb0c  $RUNNER_TEMP/duo-hinge.m" | shasum -a 256 -c -
+          clang -fobjc-arc -framework Foundation -o "$RUNNER_TEMP/duo-hinge" "$RUNNER_TEMP/duo-hinge.m"
+      - name: Inner screen (unfolded)
+        continue-on-error: true
+        run: |
+          DEVELOPER_DIR="$(xcode-select -p)" "$RUNNER_TEMP/duo-hinge" -d "$UDID" flat
+          sleep 3
+          set -o pipefail
+          TEST_RUNNER_DUO_STATE=flat xcodebuild test-without-building -project ScreenQR.xcodeproj -scheme ScreenQR \
+            -destination "id=$UDID" -derivedDataPath dd -resultBundlePath DuoInner.xcresult \
+            -only-testing:ScreenQRUITests/LayoutScreens CODE_SIGNING_ALLOWED=NO 2>&1 | tee inner.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
+          grep -q "\*\* TEST SUCCEEDED \*\*" inner.log
+      - name: Cover screen (folded)
+        continue-on-error: true
+        run: |
+          DEVELOPER_DIR="$(xcode-select -p)" "$RUNNER_TEMP/duo-hinge" -d "$UDID" closed
+          sleep 3
+          set -o pipefail
+          TEST_RUNNER_DUO_STATE=closed xcodebuild test-without-building -project ScreenQR.xcodeproj -scheme ScreenQR \
+            -destination "id=$UDID" -derivedDataPath dd -resultBundlePath DuoCover.xcresult \
+            -only-testing:ScreenQRUITests/LayoutScreens CODE_SIGNING_ALLOWED=NO 2>&1 | tee cover.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
+          grep -q "\*\* TEST SUCCEEDED \*\*" cover.log
+      - name: Show test errors
+        if: always()
+        run: |
+          grep -h -E "error:|failed|XCTAssert" inner.log cover.log 2>/dev/null | sort -u | head -60 || true
+      - name: Export screenshots
+        if: always()
+        run: |
+          mkdir -p shots
+          for bundle in DuoInner DuoCover; do
+            [ -d "$bundle.xcresult" ] || continue
+            xcrun xcresulttool export attachments --path "$bundle.xcresult" --output-path "raw-$bundle" || true
+            python3 - "raw-$bundle" shots <<'PY'
+          import json, os, re, shutil, sys
+          raw, out = sys.argv[1], sys.argv[2]
+          manifest = os.path.join(raw, "manifest.json")
+          if os.path.exists(manifest):
+              for test in json.load(open(manifest)):
+                  for item in test.get("attachments", []):
+                      exported = item.get("exportedFileName")
+                      if not exported or not exported.lower().endswith(".png"):
+                          continue
+                      label = re.match(r"[0-9]+-[a-z-]+", item.get("suggestedHumanReadableName") or exported)
+                      name = (label.group(0) if label else os.path.splitext(exported)[0]) + ".png"
+                      shutil.copy(os.path.join(raw, exported), os.path.join(out, name))
+          PY
+          done
+          for f in shots/*.png; do
+            [ -e "$f" ] || continue
+            sips -s format jpeg -s formatOptions 50 --resampleWidth 560 "$f" --out "${f%.png}.jpg" >/dev/null
+          done
+          ls -la shots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ScreenQR-screenshots-duo
           path: shots/*.png
           if-no-files-found: warn
       - name: Print screenshots (base64, for review)
@@ -199,7 +337,7 @@ jobs:
   testflight:
     if: github.event_name != 'pull_request'
     needs: [ios, ui-test]
-    runs-on: macos-15
+    runs-on: xcode-27
     env:
       TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -217,10 +355,13 @@ jobs:
           fi
       - uses: actions/checkout@v4
         if: steps.check.outputs.ready == 'true'
-      - name: Select Xcode 26
+      - name: Select Xcode 27.1
         if: steps.check.outputs.ready == 'true'
         run: |
-          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          # 정식 출시된 Xcode로 올린다 (베타 · RC는 쓰지 않는다).
+          XCODE=/Applications/Xcode_27.1.app
+          [ -d "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app | grep -v -i -E "beta|candidate" | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
           xcodebuild -version
       - name: Generate project
         if: steps.check.outputs.ready == 'true'

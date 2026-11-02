@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// 시뮬레이터에서 첫 실행 튜토리얼을 끝까지 넘겨 보고, 페이지마다 스크린샷을 남긴다 (CI가 로그로 꺼내 본다).
@@ -81,12 +82,17 @@ final class ScreenQRUITests: XCTestCase {
         XCTAssertTrue(app.buttons["tutorial.later"].exists, "실행 방법 페이지는 마지막이 아니라 ‘나중에’가 있어야 함")
         snap("05-finish")
 
-        let actionButton = app.buttons["trigger.actionButton"]
-        XCTAssertTrue(actionButton.waitForExistence(timeout: 5))
-        actionButton.tap()
-        XCTAssertTrue(app.staticTexts["설정 → 동작 버튼"].waitForExistence(timeout: 5))
+        // 아이패드에는 뒷면 탭 · 동작 버튼이 없고, 대신 Apple Pencil · AssistiveTouch가 있다.
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        XCTAssertEqual(app.buttons["trigger.backTap"].exists, !isPad, "뒷면 탭은 아이폰에만")
+        XCTAssertEqual(app.buttons["trigger.pencilSqueeze"].exists, isPad, "Apple Pencil은 아이패드에만")
+        XCTAssertTrue(app.buttons["trigger.controlCenter"].exists, "제어 센터는 둘 다")
+        let otherTrigger = app.buttons[isPad ? "trigger.pencilSqueeze" : "trigger.actionButton"]
+        XCTAssertTrue(otherTrigger.waitForExistence(timeout: 5))
+        otherTrigger.tap()
+        XCTAssertTrue(app.staticTexts[isPad ? "설정 → Apple Pencil → 스퀴즈" : "설정 → 동작 버튼"].waitForExistence(timeout: 5))
         sleep(1)
-        snap("06-finish-action-button")
+        snap("06-finish-other-trigger")
 
         // 단축어 동작이 시험용 QR을 읽어 앱에 넘긴 것처럼 다시 켠다 (앱이 꺼져 있다가 단축어로 켜진 경우와 같다).
         // UITEST_RESET은 빼서 보던 페이지(실행 방법)가 이어지게 한다.

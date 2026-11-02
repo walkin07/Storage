@@ -51,6 +51,9 @@ enum QRGenerator {
 
 /// 링크를 넣으면 바로 QR 코드를 보여 주고, 공유 · 사진 저장 · 복사를 할 수 있다.
 struct QRMakerView: View {
+    /// 넓은 화면(아이패드 가로, 펼친 아이폰 듀오): 입력 칸 옆에 QR 코드를 둔다.
+    var sideBySide = false
+
     @State private var input = uiTestDefault("uitest.makeInput") ?? ""
     @State private var message: String?
     @State private var doneTick = 0
@@ -61,7 +64,11 @@ struct QRMakerView: View {
     var body: some View {
         let content = QRGenerator.content(for: input)
         let image = QRGenerator.image(for: content)
-        VStack(spacing: 20) {
+        // 배치만 바꿔서, 화면을 돌려도 입력 중인 글자와 키보드가 그대로 남는다.
+        let stack = sideBySide
+            ? AnyLayout(HStackLayout(alignment: .top, spacing: 20))
+            : AnyLayout(VStackLayout(spacing: 20))
+        stack {
             inputCard
             if content.isEmpty {
                 placeholder
@@ -141,7 +148,8 @@ struct QRMakerView: View {
                 .interpolation(.none)
                 .resizable()
                 .scaledToFit()
-                .frame(maxWidth: 280)
+                // 나란히 둘 때는 세로가 짧은 화면(펼친 아이폰 듀오)에서도 한눈에 보이게 조금 작게
+                .frame(maxWidth: sideBySide ? 230 : 280)
                 .clipShape(.rect(cornerRadius: 16))
                 .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
                 .accessibilityLabel("QR 코드")

@@ -80,11 +80,13 @@ struct MockScene: Equatable {
     }
 }
 
-/// 아이폰 화면 모양 안에 단축어 편집 화면을 단순하게 그린다.
+/// 아이폰(아이패드) 화면 모양 안에 단축어 편집 화면을 단순하게 그린다.
 struct ShortcutMock: View {
     let scene: MockScene
     var showsBackLink = false
     var still = false
+    /// 아이패드 모양 (다이내믹 아일랜드 대신 카메라 점, 덜 둥근 모서리)
+    var tablet = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -103,15 +105,13 @@ struct ShortcutMock: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .modifier(PhoneScreen())
+        .modifier(PhoneScreen(tablet: tablet))
     }
 
-    /// 다이내믹 아일랜드와, 다른 앱에서 돌아오는 ‘◀ Screen QR Scanner’
+    /// 다이내믹 아일랜드(아이패드는 카메라)와, 다른 앱에서 돌아오는 ‘◀ Screen QR Scanner’
     private var statusBar: some View {
         ZStack {
-            Capsule()
-                .fill(.black)
-                .frame(width: 44, height: 16)
+            DeviceCamera(tablet: tablet)
             HStack {
                 if scene.inShortcuts && showsBackLink {
                     HStack(spacing: 2) {
@@ -374,6 +374,8 @@ struct TapPose {
 
 struct WelcomeHero: View {
     let still: Bool
+    /// 아이패드 모양 (더 넓고 덜 둥글며, 다이내믹 아일랜드 대신 카메라 점)
+    var tablet = false
 
     @State private var tapA = 0
     @State private var tapB = 0
@@ -382,26 +384,31 @@ struct WelcomeHero: View {
     @State private var scan: CGFloat = 0
     @State private var opened: Bool
 
-    init(still: Bool) {
+    init(still: Bool, tablet: Bool = false) {
         self.still = still
+        self.tablet = tablet
         _framed = State(initialValue: still)
         _opened = State(initialValue: still)
     }
 
+    /// 기기 그림 크기와 모서리
+    private var deviceSize: CGSize { tablet ? CGSize(width: 220, height: 296) : CGSize(width: 150, height: 300) }
+    private var corner: CGFloat { tablet ? 24 : 34 }
+
     var body: some View {
         ZStack {
-            PhoneRipple(tick: tapA)
-            PhoneRipple(tick: tapB)
+            PhoneRipple(tick: tapA, size: deviceSize, corner: corner + 4)
+            PhoneRipple(tick: tapB, size: deviceSize, corner: corner + 4)
             phone
         }
-        .frame(width: 220, height: 320)
+        .frame(width: deviceSize.width + 70, height: 320)
         .accessibilityHidden(true)
         .task { await play() }
     }
 
     private var phone: some View {
         ZStack(alignment: .top) {
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
                 .fill(.white)
             VStack(spacing: 10) {
                 Capsule().fill(Color.black.opacity(0.08)).frame(width: 90, height: 8)
@@ -413,20 +420,27 @@ struct WelcomeHero: View {
             .frame(maxHeight: .infinity)
             if opened {
                 LinkOpenedBanner(text: "링크를 열었어요")
-                    .padding(.top, 34)
+                    .padding(.top, tablet ? 22 : 34)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
-            // 알림이 다이내믹 아일랜드 뒤에서 내려오도록 아일랜드를 맨 위에 그린다.
-            Capsule()
-                .fill(.black)
-                .frame(width: 46, height: 14)
-                .padding(.top, 12)
+            // 알림이 다이내믹 아일랜드 뒤에서 내려오도록 아일랜드를 맨 위에 그린다. (아이패드는 작은 카메라)
+            if tablet {
+                Circle()
+                    .fill(Color.black.opacity(0.8))
+                    .frame(width: 6, height: 6)
+                    .padding(.top, 9)
+            } else {
+                Capsule()
+                    .fill(.black)
+                    .frame(width: 46, height: 14)
+                    .padding(.top, 12)
+            }
         }
-        .frame(width: 150, height: 300)
-        .clipShape(.rect(cornerRadius: 34, style: .continuous))
+        .frame(width: deviceSize.width, height: deviceSize.height)
+        .clipShape(.rect(cornerRadius: corner, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .strokeBorder(.black, lineWidth: 6)
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .strokeBorder(.black, lineWidth: tablet ? 8 : 6)
         }
         .shadow(color: .black.opacity(0.14), radius: 28, y: 16)
     }
@@ -484,14 +498,16 @@ struct WelcomeHero: View {
     }
 }
 
-/// 휴대폰 둘레로 퍼지는 물결 (뒷면을 톡 친 느낌)
+/// 휴대폰 둘레로 퍼지는 물결 (뒷면을 톡 친 느낌. 아이패드에서는 단축어를 실행한 느낌)
 struct PhoneRipple: View {
     let tick: Int
+    var size = CGSize(width: 150, height: 300)
+    var corner: CGFloat = 38
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 38, style: .continuous)
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
             .stroke(Color.black.opacity(0.2), lineWidth: 2)
-            .frame(width: 150, height: 300)
+            .frame(width: size.width, height: size.height)
             .keyframeAnimator(initialValue: RipplePose(), trigger: tick) { content, pose in
                 content
                     .scaleEffect(pose.scale)
@@ -569,12 +585,12 @@ struct SafariScene: Equatable {
 
 struct SafariMock: View {
     let scene: SafariScene
+    /// 아이패드 모양. 아이패드 Safari는 주소창이 위에 있어서 메뉴도 주소창 아래로 펼쳐진다.
+    var tablet = false
 
     var body: some View {
         VStack(spacing: 0) {
-            Capsule()
-                .fill(.black)
-                .frame(width: 44, height: 16)
+            DeviceCamera(tablet: tablet)
                 .frame(height: 20)
                 .padding(.bottom, 12)
             ZStack {
@@ -591,7 +607,7 @@ struct SafariMock: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .modifier(PhoneScreen())
+        .modifier(PhoneScreen(tablet: tablet))
     }
 
     /// 설정 → 앱 → Safari → 확장 프로그램
@@ -638,33 +654,42 @@ struct SafariMock: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// 웹 페이지 속 QR + 아래쪽 주소창
+    /// 웹 페이지 속 QR + 주소창 (아이폰은 아래, 아이패드는 위)
     private var safari: some View {
-        ZStack(alignment: .bottom) {
+        ZStack(alignment: tablet ? .top : .bottom) {
             VStack(spacing: 9) {
                 Capsule().fill(Color.black.opacity(0.08)).frame(width: 120, height: 8)
                 Capsule().fill(Color.black.opacity(0.05)).frame(width: 84, height: 8)
                 pageQR.padding(.vertical, 10)
-                Capsule().fill(Color.black.opacity(0.05)).frame(width: 110, height: 8)
+                if !tablet {
+                    Capsule().fill(Color.black.opacity(0.05)).frame(width: 110, height: 8)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .padding(.top, 6)
+            // 아이패드는 위쪽 주소창 아래부터 페이지가 보인다.
+            .padding(.top, tablet ? 48 : 6)
             VStack(alignment: .leading, spacing: 8) {
+                if tablet {
+                    addressBar
+                }
                 if scene.menuOpen {
                     extensionMenu
                         .transition(
-                            .offset(y: 16)
+                            .offset(y: tablet ? -16 : 16)
                                 .combined(with: .opacity)
-                                .combined(with: .scale(scale: 0.95, anchor: .bottomLeading))
+                                .combined(with: .scale(scale: 0.95, anchor: tablet ? .topLeading : .bottomLeading))
                         )
                 }
-                addressBar
+                if !tablet {
+                    addressBar
+                }
             }
         }
-        .overlay(alignment: .top) {
+        // 링크를 열었다는 알림은 주소창 반대편에 나온다.
+        .overlay(alignment: tablet ? .bottom : .top) {
             if scene.opened {
                 LinkOpenedBanner(text: "새 탭에서 열었어요")
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(.move(edge: tablet ? .bottom : .top).combined(with: .opacity))
             }
         }
     }
@@ -791,18 +816,39 @@ struct LinkOpenedBanner: View {
     }
 }
 
-/// 그림을 아이폰 화면처럼 감싸는 틀
+/// 그림 맨 위의 다이내믹 아일랜드 (아이패드는 작은 카메라 점)
+struct DeviceCamera: View {
+    var tablet = false
+
+    var body: some View {
+        if tablet {
+            Circle()
+                .fill(Color.black.opacity(0.75))
+                .frame(width: 6, height: 6)
+        } else {
+            Capsule()
+                .fill(.black)
+                .frame(width: 44, height: 16)
+        }
+    }
+}
+
+/// 그림을 아이폰(아이패드) 화면처럼 감싸는 틀
 struct PhoneScreen: ViewModifier {
+    /// 아이패드: 모서리가 덜 둥글다.
+    var tablet = false
+
     func body(content: Content) -> some View {
+        let corner: CGFloat = tablet ? 24 : 34
         content
             .padding(.horizontal, 14)
             .padding(.top, 10)
             .padding(.bottom, 14)
             .frame(maxWidth: 300)
             .background(Color(white: 0.965))
-            .clipShape(.rect(cornerRadius: 34, style: .continuous))
+            .clipShape(.rect(cornerRadius: corner, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 34, style: .continuous)
+                RoundedRectangle(cornerRadius: corner, style: .continuous)
                     .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
             }
             // 사방으로 고르게 (빛이 위에서 오는 것처럼 아래만 살짝 더).
@@ -819,12 +865,15 @@ struct PhoneScreen: ViewModifier {
 struct NextHintCard: View {
     let text: String
     let still: Bool
+    /// 덮는 그림의 모서리와 맞춘다 (아이패드 그림은 덜 둥글다).
+    var corner: CGFloat = 34
 
     @State private var shown: Bool
 
-    init(text: String, still: Bool) {
+    init(text: String, still: Bool, corner: CGFloat = 34) {
         self.text = text
         self.still = still
+        self.corner = corner
         _shown = State(initialValue: still)
     }
 
@@ -855,7 +904,7 @@ struct NextHintCard: View {
                 .opacity(shown ? 1 : 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.regularMaterial, in: .rect(cornerRadius: 34, style: .continuous))
+        .background(.regularMaterial, in: .rect(cornerRadius: corner, style: .continuous))
         .onAppear {
             guard !still else { return }
             withAnimation(.spring(duration: 0.55, bounce: 0.4).delay(0.12)) { shown = true }

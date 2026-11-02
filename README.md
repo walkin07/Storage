@@ -6,7 +6,8 @@
 | 어디서 | 어떻게 | 비고 |
 |---|---|---|
 | 아이폰 (모든 앱: 크롬, 인스타, 카톡…) | 뒷면 두 번 탭 / 동작 버튼 / 제어 센터 | 단축어 사용 |
-| 아이폰 Safari | 주소창 메뉴 → Screen QR Scanner | 단축어 필요 없음 |
+| 아이패드 (모든 앱) | 제어 센터 / Apple Pencil Pro 스퀴즈 / AssistiveTouch | 단축어 사용 |
+| 아이폰 · 아이패드 Safari | 주소창 메뉴 → Screen QR Scanner | 단축어 필요 없음 |
 | PC Chrome · Edge · 웨일 · Brave · Opera · Vivaldi | 툴바 아이콘 또는 `Alt+Shift+Q` | |
 | PC/안드로이드 Firefox | 툴바 아이콘 또는 `Alt+Shift+Q` | 서명 필요 (아래 참고) |
 
@@ -86,9 +87,20 @@ TestFlight 빌드는 90일 동안 쓸 수 있고, 새로 push하면 자동으로
 | 방법 | 설정 |
 |---|---|
 | 뒷면 탭 | 설정 → 손쉬운 사용 → 터치 → 뒷면 탭 → 이중 탭 → 만든 단축어 |
-| 동작 버튼 (15 Pro · 16 이후) | 설정 → 동작 버튼 → 단축어 → 만든 단축어 |
+| 동작 버튼 (15 Pro · 16 이후, 아이폰 듀오 제외) | 설정 → 동작 버튼 → 단축어 → 만든 단축어 |
 | 제어 센터 | 제어 센터 왼쪽 위 ＋ → 컨트롤 추가 → 단축어 → 만든 단축어. 단축어 맨 위에 **대기 1초**를 넣어 주세요 (가끔 제어 센터가 닫히기 전에 찍혀서 QR을 못 찾는 것을 막습니다) |
+| Apple Pencil Pro (아이패드) | 설정 → Apple Pencil → 스퀴즈 → 단축어 → 만든 단축어. 펜을 살짝 쥐면 실행 |
+| AssistiveTouch (아이패드 · 아이폰) | 설정 → 손쉬운 사용 → 터치 → AssistiveTouch 켜기 → 이중 탭 → 만든 단축어 |
 | Safari | 설정 → 앱 → Safari → 확장 프로그램 → Screen QR Scanner 켜기 |
+
+튜토리얼의 실행 방법 페이지는 기기에 맞는 것만 보여 줍니다 (아이폰: 뒷면 탭 · 동작 버튼 · 제어 센터, 아이패드: 제어 센터 · Apple Pencil · AssistiveTouch).
+
+## 아이패드 · 아이폰 듀오
+
+- 아이패드에서도 아이폰 앱을 키운 것이 아니라 아이패드 화면에 맞춰 보입니다. 모든 방향으로 돌릴 수 있고, Split View · Stage Manager 창 크기에도 맞춰집니다.
+- 가로로 넓은 화면(아이패드 가로, 펼친 아이폰 듀오)에서는 튜토리얼 그림과 설명이 나란히 놓이고, QR 만들기는 입력 칸 옆에 QR 코드가 나옵니다. 세로로 긴 화면에서는 가운데 한 줄로 모읍니다.
+- 아이폰 듀오는 접은 바깥 화면처럼 세로가 짧은 화면에서도 튜토리얼 그림을 줄여 아래 버튼까지 한눈에 보이게 합니다. 펼친 안쪽 화면을 꽉 채워 쓰도록 iOS 27.1 SDK(Xcode 27.1)로 빌드합니다 (지원하는 최소 iOS는 그대로 26).
+- 아이패드 튜토리얼은 아이패드 모양 그림(Safari 주소창이 위쪽)과 아이패드에서 쓸 수 있는 실행 방법으로 안내합니다.
 
 ## 사진에서 QR 열기 (아이폰 앱)
 
@@ -138,13 +150,13 @@ Chrome 웹 스토어(1회 $5)나 Edge 부가 기능(무료)에 올리면 개발�
 ## 구조
 
 - `ScreenQR/`: iOS 앱 (Liquid Glass 홈 화면, 첫 실행 단축어 튜토리얼, 단축어 액션 App Intent, Vision 기반 QR 인식)
-- `ScreenQRUITests/`: 시뮬레이터에서 튜토리얼을 끝까지 넘겨 보는 UI 테스트 (CI가 페이지마다 스크린샷을 남김)
+- `ScreenQRUITests/`: 시뮬레이터에서 튜토리얼을 끝까지 넘겨 보는 UI 테스트 (CI가 페이지마다 스크린샷을 남김). `LayoutScreens`는 아이폰 · 아이패드(세로·가로) · 아이폰 듀오(접은·펼친 화면)에서 주요 화면을 찍어 배치를 확인합니다
 - `SafariExtension/`: iOS Safari 확장 (네이티브 Vision으로 인식)
 - `browser-extension/`: Chrome/Edge/Firefox 등 공용 확장 (Manifest V3, ZXing WASM으로 인식)
   - `vendor/zxing-reader.js`, `vendor/zxing_reader.wasm`: [zxing-wasm](https://github.com/Sec-ant/zxing-wasm) 3.1.5 (MIT)
-- `.github/workflows/build.yml`: iOS 앱 빌드(서명 없는 IPA), 시뮬레이터 UI 테스트, 확장 검사·패키징, Releases 업로드, TestFlight 업로드
+- `.github/workflows/build.yml`: iOS 앱 빌드(서명 없는 IPA), 시뮬레이터 UI 테스트(아이폰 · 아이패드 · 아이폰 듀오), 확장 검사·패키징, Releases 업로드, TestFlight 업로드. 아이폰 듀오를 접고 펴는 데는 공개 도구 [duo-fold-control](https://github.com/tosbaha/duo-fold-control)(MIT)의 `duo-hinge`를 고정 버전으로 받아 씁니다
 - `.github/workflows/appstore.yml`, `AppStore/compose.py`: 앱 스토어 이미지 만들기
-- 직접 Xcode로 빌드하려면: `brew install xcodegen && xcodegen generate` 후 두 타깃 모두 Team 선택 (iOS 26, Xcode 26 이상)
+- 직접 Xcode로 빌드하려면: `brew install xcodegen && xcodegen generate` 후 두 타깃 모두 Team 선택 (iOS 26 이상 지원, Xcode 27.1 이상)
 
 ## 다른 앱
 

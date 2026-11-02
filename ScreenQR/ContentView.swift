@@ -92,25 +92,40 @@ struct ContentView: View {
     }
 
     private var home: some View {
-        ScrollView {
-            VStack(spacing: 32) {
-                header
-                modePicker
-                switch mode {
-                case .scan:
-                    VStack(spacing: 16) {
-                        PhotoScanCard(onOpen: openPayload)
-                        tutorialButton
+        GeometryReader { proxy in
+            // 키보드가 올라와도 배치가 바뀌지 않게, 안전 영역(키보드 포함)을 더한 창 전체 크기로 판단한다.
+            let insets = proxy.safeAreaInsets
+            let width = proxy.size.width + insets.leading + insets.trailing
+            let height = proxy.size.height + insets.top + insets.bottom
+            // 아이패드 가로 · 펼친 아이폰 듀오처럼 가로로 넓은 화면
+            let wide = width >= 700 && width > height * 1.1
+            // 그중 세로가 짧은 화면(펼친 아이폰 듀오 등)은 머리글을 한 줄로 줄인다.
+            let short = wide && height < 760
+            ScrollView {
+                VStack(spacing: short ? 24 : 32) {
+                    header(inline: short)
+                    modePicker
+                        .frame(maxWidth: 560)
+                    switch mode {
+                    case .scan:
+                        VStack(spacing: 16) {
+                            PhotoScanCard(onOpen: openPayload)
+                            tutorialButton
+                        }
+                        .frame(maxWidth: 560)
+                    case .make:
+                        // 넓은 화면에서는 입력과 QR 코드를 나란히 둔다.
+                        QRMakerView(sideBySide: wide)
+                            .frame(maxWidth: wide ? 880 : 560)
                     }
-                case .make:
-                    QRMakerView()
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, short ? 24 : 40)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 40)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollDismissesKeyboard(.interactively)
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .scrollDismissesKeyboard(.interactively)
         .background(Color.white.ignoresSafeArea())
     }
 
@@ -150,11 +165,13 @@ struct ContentView: View {
         }
     }
 
-    private var header: some View {
-        VStack(spacing: 16) {
+    /// - Parameter inline: 세로가 짧은 넓은 화면에서는 아이콘과 이름을 한 줄에 둔다.
+    private func header(inline: Bool) -> some View {
+        let stack = inline ? AnyLayout(HStackLayout(spacing: 16)) : AnyLayout(VStackLayout(spacing: 16))
+        return stack {
             Image(systemName: "qrcode.viewfinder")
-                .font(.system(size: 40, weight: .medium))
-                .frame(width: 88, height: 88)
+                .font(.system(size: inline ? 28 : 40, weight: .medium))
+                .frame(width: inline ? 60 : 88, height: inline ? 60 : 88)
                 .glassEffect(.regular.interactive(), in: .circle)
             Text("Screen QR Scanner")
                 .font(.largeTitle.bold())

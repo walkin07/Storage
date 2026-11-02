@@ -13,7 +13,8 @@ settings:
     # 번들 ID. CI에서는 저장소 변수 APP_BUNDLE_ID로 바꿀 수 있고, 확장 프로그램은 뒤에 .safari가 붙는다.
     APP_BUNDLE_ID: io.github.walkin07.screenqr
     CODE_SIGN_STYLE: Automatic
-    TARGETED_DEVICE_FAMILY: "1"
+    # 아이폰(아이폰 듀오 포함)과 아이패드
+    TARGETED_DEVICE_FAMILY: "1,2"
 targets:
   ScreenQR:
     type: application
@@ -34,8 +35,14 @@ targets:
         CFBundleLocalizations: [ko]
         NSPhotoLibraryAddUsageDescription: 만든 QR 코드를 사진 앱에 저장해요.
         UILaunchScreen: {}
+        # 아이폰은 세로로만 (펼친 아이폰 듀오의 안쪽 화면은 방향과 상관없이 화면 크기에 맞춰 배치된다)
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        UIRequiresFullScreen: true
+        # 아이패드는 모든 방향 + Split View · Stage Manager (UIRequiresFullScreen을 쓰지 않는다)
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UIUserInterfaceStyle: Light
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
