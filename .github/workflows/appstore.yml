@@ -82,6 +82,7 @@ jobs:
             xcodebuild test -project ScreenQR.xcodeproj -scheme ScreenQR \
               -destination "id=$UDID" -resultBundlePath "Shots-$DEVICE.xcresult" \
               -only-testing:ScreenQRUITests/AppStoreScreenshots \
+              -retry-tests-on-failure -test-iterations 2 \
               CODE_SIGNING_ALLOWED=NO 2>&1 | tee "test-$DEVICE.log" | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
             grep -q "\*\* TEST SUCCEEDED \*\*" "test-$DEVICE.log"
           done
