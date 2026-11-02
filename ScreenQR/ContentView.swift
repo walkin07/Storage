@@ -191,6 +191,8 @@ struct ContentView: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(item == mode ? Color.white : Color.primary)
                             .frame(maxWidth: .infinity, minHeight: 46)
+                            // 글자뿐 아니라 버튼(캡슐) 전체가 눌리게 (아이패드처럼 버튼이 넓으면 빈 곳이 많다)
+                            .contentShape(.capsule)
                     }
                     .buttonStyle(.plain)
                     .glassEffect(

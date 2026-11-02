@@ -840,16 +840,16 @@ private struct StepPage: View {
     private func playOpen() async {
         while !Task.isCancelled {
             withAnimation(.smooth(duration: 0.3)) { activeLine = 0 }
-            guard await tutorialPause(1000) else { return }
+            guard await tutorialPause(900) else { return }
             scene.tapOpen += 1
-            guard await tutorialPause(400) else { return }
+            guard await tutorialPause(380) else { return }
             withAnimation(.spring(duration: 0.55, bounce: 0.18)) { scene.inShortcuts = true }
-            guard await tutorialPause(1300) else { return }
-            // 2번 설명: 새 단축어 화면에서 왼쪽 위 ◀를 누르기까지 충분히 보여 준다.
+            guard await tutorialPause(1500) else { return }
             withAnimation(.smooth(duration: 0.3)) { activeLine = 1 }
-            guard await tutorialPause(1700) else { return }
+            guard await tutorialPause(900) else { return }
             scene.tapBack += 1
-            guard await tutorialPause(700) else { return }
+            // 왼쪽 위 ◀를 누른 모습을 충분히 보여 준 뒤에 처음 장면으로 돌아간다.
+            guard await tutorialPause(1500) else { return }
             // ◀로 이 앱에 돌아온 화면이 곧 첫 장면이라, 돌아오는 순간 1번 아이콘도 함께 켜진다.
             guard await finishLoop() else { return }
         }

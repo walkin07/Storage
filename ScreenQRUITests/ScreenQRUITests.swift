@@ -189,6 +189,24 @@ final class ScreenQRUITests: XCTestCase {
         XCTAssertFalse(app.buttons["tutorial.primary"].exists, "건너뛴 뒤에는 튜토리얼이 다시 뜨지 않아야 함")
     }
 
+    /// 기본 화면의 ‘QR 읽기 / QR 만들기’는 글자가 없는 가장자리를 눌러도 바뀌어야 한다 (아이패드는 버튼이 넓어 빈 곳이 많다).
+    @MainActor
+    func testModePickerWholeButtonIsTappable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["UITEST", "-tutorial.done", "YES"]
+        app.launch()
+
+        let make = app.buttons["QR 만들기"]
+        XCTAssertTrue(make.waitForExistence(timeout: 20), "기본 화면의 QR 만들기 버튼")
+        // 가운데 글자에서 먼 왼쪽 가장자리를 누른다.
+        make.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5)).tap()
+        XCTAssertTrue(app.staticTexts["링크나 글"].waitForExistence(timeout: 5), "버튼 가장자리를 눌러도 QR 만들기로 바뀌어야 함")
+
+        let scan = app.buttons["QR 읽기"]
+        scan.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["home.tutorial"].waitForExistence(timeout: 5), "버튼 가장자리를 눌러도 QR 읽기로 바뀌어야 함")
+    }
+
     /// 애니메이션을 켠 채로 페이지마다 바로 띄워, 그림이 움직이는 중간 장면을 몇 장 찍는다.
     @MainActor
     func testTutorialAnimations() {

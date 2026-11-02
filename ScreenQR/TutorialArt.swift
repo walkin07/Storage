@@ -423,13 +423,8 @@ struct WelcomeHero: View {
                     .padding(.top, tablet ? 22 : 34)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
-            // 알림이 다이내믹 아일랜드 뒤에서 내려오도록 아일랜드를 맨 위에 그린다. (아이패드는 작은 카메라)
-            if tablet {
-                Circle()
-                    .fill(Color.black.opacity(0.8))
-                    .frame(width: 6, height: 6)
-                    .padding(.top, 9)
-            } else {
+            // 알림이 다이내믹 아일랜드 뒤에서 내려오도록 아일랜드를 맨 위에 그린다. (아이패드는 없음)
+            if !tablet {
                 Capsule()
                     .fill(.black)
                     .frame(width: 46, height: 14)
@@ -816,15 +811,14 @@ struct LinkOpenedBanner: View {
     }
 }
 
-/// 그림 맨 위의 다이내믹 아일랜드 (아이패드는 작은 카메라 점)
+/// 그림 맨 위의 다이내믹 아일랜드 (아이패드는 아무것도 그리지 않고 자리만 둔다)
 struct DeviceCamera: View {
     var tablet = false
 
     var body: some View {
         if tablet {
-            Circle()
-                .fill(Color.black.opacity(0.75))
-                .frame(width: 6, height: 6)
+            Color.clear
+                .frame(width: 44, height: 16)
         } else {
             Capsule()
                 .fill(.black)
