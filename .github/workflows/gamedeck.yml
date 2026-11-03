@@ -1,0 +1,245 @@
+name: GameDeck
+
+on:
+  push:
+    paths:
+      - "GameDeck/**"
+      - ".github/workflows/gamedeck.yml"
+  pull_request:
+    paths:
+      - "GameDeck/**"
+      - ".github/workflows/gamedeck.yml"
+  workflow_dispatch:
+
+jobs:
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate --spec GameDeck/project.yml
+      - name: Build (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild -project GameDeck/GameDeck.xcodeproj -scheme GameDeck \
+            -destination 'generic/platform=iOS' -configuration Release \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log
+      - name: Show compile errors
+        if: failure()
+        run: |
+          grep -E "error:|warning: .*(isolated|Sendable)" build.log | sort -u | head -100 || true
+      - name: Check app bundle
+        run: |
+          APP=build/Build/Products/Release-iphoneos/GameDeck.app
+          test -f "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleURLTypes:0:CFBundleURLSchemes:0" "$APP/Info.plist" | grep -qx gamedeck
+          /usr/libexec/PlistBuddy -c "Print :LSApplicationQueriesSchemes" "$APP/Info.plist"
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p dist/Payload
+          cp -R build/Build/Products/Release-iphoneos/GameDeck.app dist/Payload/
+          (cd dist && zip -qry GameDeck-unsigned.ipa Payload)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GameDeck-unsigned-ipa
+          path: dist/GameDeck-unsigned.ipa
+
+  # 시뮬레이터에서 앱을 띄워 주요 화면을 확인한다. 스크린샷은 아티팩트로 올리고, 로그에도 작게 남긴다.
+  ui-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate --spec GameDeck/project.yml
+      - name: Pick an iPhone simulator
+        run: |
+          cat > "$RUNNER_TEMP/pick.py" <<'PY'
+          import json, sys
+          best = None
+          for runtime, items in json.load(sys.stdin)["devices"].items():
+              if "iOS-26" not in runtime and "iOS-27" not in runtime:
+                  continue
+              for device in items:
+                  name = device["name"]
+                  if not name.startswith("iPhone"):
+                      continue
+                  score = ("Pro" in name and "Max" not in name, runtime, name)
+                  if best is None or score > best[0]:
+                      best = (score, device["udid"], name, runtime)
+          print(f"{best[1]} {best[2]} {best[3]}" if best else "")
+          PY
+          PICK=$(xcrun simctl list devices available -j | python3 "$RUNNER_TEMP/pick.py")
+          echo "simulator: $PICK"
+          test -n "$PICK"
+          echo "UDID=${PICK%% *}" >> "$GITHUB_ENV"
+      - name: UI test
+        run: |
+          set -o pipefail
+          xcodebuild test -project GameDeck/GameDeck.xcodeproj -scheme GameDeck \
+            -destination "id=$UDID" -resultBundlePath UITests.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
+          grep -q "\*\* TEST SUCCEEDED \*\*" test.log
+      - name: Show test errors
+        if: failure()
+        run: |
+          grep -E "error:|failed|XCTAssert" test.log | sort -u | head -80 || true
+      - name: Export screenshots
+        if: always()
+        run: |
+          mkdir -p shots
+          xcrun xcresulttool export attachments --path UITests.xcresult --output-path shots-raw || true
+          cat > "$RUNNER_TEMP/rename.py" <<'PY'
+          import json, os, re, shutil, sys
+          raw, out = sys.argv[1], sys.argv[2]
+          manifest = os.path.join(raw, "manifest.json")
+          if os.path.exists(manifest):
+              for test in json.load(open(manifest)):
+                  for item in test.get("attachments", []):
+                      exported = item.get("exportedFileName")
+                      if not exported or not exported.lower().endswith(".png"):
+                          continue
+                      label = item.get("suggestedHumanReadableName") or exported
+                      label = re.match(r"[0-9]+-[a-z-]+", label)
+                      name = (label.group(0) if label else os.path.splitext(exported)[0]) + ".png"
+                      shutil.copy(os.path.join(raw, exported), os.path.join(out, name))
+          PY
+          python3 "$RUNNER_TEMP/rename.py" shots-raw shots || true
+          for f in shots/*.png; do
+            [ -e "$f" ] || continue
+            W=$(sips -g pixelWidth "$f" | awk '/pixelWidth/{print $2}')
+            H=$(sips -g pixelHeight "$f" | awk '/pixelHeight/{print $2}')
+            if [ "$W" -gt "$H" ]; then SIZE=860; else SIZE=420; fi
+            sips -s format jpeg -s formatOptions 50 --resampleWidth "$SIZE" "$f" --out "${f%.png}.jpg" >/dev/null
+          done
+          ls -la shots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: GameDeck-screenshots
+          path: shots/*.png
+          if-no-files-found: warn
+      - name: Print screenshots (base64, for review)
+        if: always()
+        run: |
+          for f in shots/*.jpg; do
+            [ -e "$f" ] || continue
+            echo "=====BEGIN $(basename "$f")====="
+            base64 -b 76 -i "$f"
+            echo "=====END $(basename "$f")====="
+          done
+
+  release:
+    if: github.event_name != 'pull_request'
+    needs: ios
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: gamedeck-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: GameDeck-unsigned-ipa
+          path: dist
+      # 지웠다가 다시 만들면 빌드한 커밋이 브랜치의 최신 커밋이 아닐 때 HTTP 403으로 막혀 릴리스가 사라진다.
+      # 그래서 있으면 파일만 바꿔 올리고, 없을 때만 새로 만든다.
+      - name: Publish "gamedeck-latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TITLE="게임덱 (최신 빌드)"
+          NOTES="GameDeck-unsigned.ipa: Sideloadly · SideStore · LiveContainer 등으로 아이폰에 설치하세요. 사용법은 저장소의 GameDeck/README.md에 있어요. (커밋 ${GITHUB_SHA::7})"
+          if gh release view gamedeck-latest >/dev/null 2>&1; then
+            gh release upload gamedeck-latest dist/GameDeck-unsigned.ipa --clobber
+            gh release edit gamedeck-latest --title "$TITLE" --notes "$NOTES"
+          else
+            gh release create gamedeck-latest dist/GameDeck-unsigned.ipa --target "$GITHUB_SHA" --prerelease --title "$TITLE" --notes "$NOTES"
+          fi
+
+  # Apple 개발자 계정 시크릿이 있으면 서명해서 TestFlight에 올린다 (화면 QR과 같은 시크릿).
+  testflight:
+    if: github.event_name != 'pull_request'
+    needs: ios
+    runs-on: macos-15
+    env:
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      GAMEDECK_BUNDLE_ID: ${{ vars.GAMEDECK_BUNDLE_ID || 'io.github.walkin07.gamedeck' }}
+    steps:
+      - name: Check App Store Connect secrets
+        id: check
+        run: |
+          if [ -n "$TEAM_ID" ] && [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_KEY_P8" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::APPLE_TEAM_ID / ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8 시크릿이 없어 TestFlight 업로드를 건너뜁니다."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
+      - name: Select Xcode 26
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          xcodebuild -version
+      - name: Generate project
+        if: steps.check.outputs.ready == 'true'
+        run: brew install xcodegen && xcodegen generate --spec GameDeck/project.yml
+      - name: Write API key
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
+      - name: Archive
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          # 서명 없이 아카이브하고, 내보낼 때 Apple 클라우드 서명으로 배포용 서명을 붙인다 (인증서·프로필 파일 불필요).
+          xcodebuild archive -project GameDeck/GameDeck.xcodeproj -scheme GameDeck -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/GameDeck.xcarchive" \
+            GAMEDECK_BUNDLE_ID="$GAMEDECK_BUNDLE_ID" DEVELOPMENT_TEAM="$TEAM_ID" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" CODE_SIGNING_ALLOWED=NO
+      - name: Sign and upload to TestFlight
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          set -o pipefail
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/GameDeck.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/export.log" || {
+            if grep -q "Error Downloading App Information" "$RUNNER_TEMP/export.log"; then
+              echo "::error::App Store Connect에 번들 ID $GAMEDECK_BUNDLE_ID 앱이 없어요. GameDeck/README.md의 TestFlight 준비 1~2단계(App ID 등록, 앱 만들기)를 먼저 해 주세요."
+            fi
+            exit 1
+          }

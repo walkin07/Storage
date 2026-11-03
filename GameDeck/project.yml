@@ -1,0 +1,78 @@
+name: GameDeck
+options:
+  bundleIdPrefix: io.github.walkin07
+  developmentLanguage: ko
+  deploymentTarget:
+    iOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1,2"
+    # 번들 ID. CI에서는 저장소 변수 GAMEDECK_BUNDLE_ID로 바꿀 수 있다 (TestFlight 앱 등록과 같아야 한다).
+    GAMEDECK_BUNDLE_ID: io.github.walkin07.gamedeck
+targets:
+  GameDeck:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Assets.xcassets
+    scheme:
+      testTargets:
+        - GameDeckUITests
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: 게임덱
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIUserInterfaceStyle: Dark
+        ITSAppUsesNonExemptEncryption: false
+        # MeloNX가 게임 목록을 돌려줄 때(gamedeck://melonx?games=…)와 바로가기(gamedeck://play, gamedeck://resume)에 쓴다.
+        CFBundleURLTypes:
+          - CFBundleURLName: gamedeck
+            CFBundleURLSchemes: [gamedeck]
+        # 엔진 앱이 설치됐는지 canOpenURL로 확인할 스킴
+        LSApplicationQueriesSchemes:
+          - melonx
+          - madeira
+          - madeira-steamui
+          - playport
+          - livecontainer
+          - stikjit
+          - stikdebug
+          - localdevvpn
+          - shortcuts
+        GCSupportedGameControllers:
+          - ProfileName: ExtendedGamepad
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(GAMEDECK_BUNDLE_ID)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  # 시뮬레이터에서 화면을 띄워 보는 UI 테스트 (CI의 ui-test 작업). 배포용 IPA에는 들어가지 않는다.
+  GameDeckUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: GameDeck
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(GAMEDECK_BUNDLE_ID).uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: GameDeck

@@ -1,18 +1,35 @@
 name: Build
 
 on:
+  # 게임덱(GameDeck/)만 바뀐 push에서는 화면 QR을 다시 빌드·배포하지 않는다 (gamedeck.yml이 따로 빌드).
+  # 앱 스토어 이미지(AppStore/, appstore.yml)만 바뀐 push도 앱을 다시 빌드·배포하지 않는다.
   push:
+    paths-ignore:
+      - "GameDeck/**"
+      - ".github/workflows/gamedeck.yml"
+      - "AppStore/**"
+      - "ScreenQRUITests/AppStoreScreenshots.swift"
+      - ".github/workflows/appstore.yml"
   pull_request:
+    paths-ignore:
+      - "GameDeck/**"
+      - ".github/workflows/gamedeck.yml"
+      - "AppStore/**"
+      - "ScreenQRUITests/AppStoreScreenshots.swift"
+      - ".github/workflows/appstore.yml"
   workflow_dispatch:
 
 jobs:
   ios:
-    runs-on: macos-15
+    # Xcode 27(iOS 27.1 SDK)이 있는 실행기
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode 26
+      - name: Select Xcode 27.1
         run: |
-          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          # 아이폰 듀오의 안쪽 화면을 꽉 채우려면 iOS 27.1 SDK로 빌드해야 한다 (최소 지원은 그대로 iOS 26).
+          XCODE=/Applications/Xcode_27.1.app
+          [ -d "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app | grep -v -i -E "beta|candidate" | sort -V | tail -1)
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
       - name: Install XcodeGen
@@ -21,11 +38,18 @@ jobs:
         run: xcodegen generate
       - name: Build (unsigned)
         run: |
+          set -o pipefail
           xcodebuild -project ScreenQR.xcodeproj -scheme ScreenQR \
             -destination 'generic/platform=iOS' -configuration Release \
-            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log
+      - name: Show compile errors
+        if: failure()
+        run: |
+          grep -E "error:" build.log | sort -u | head -100 || true
       - name: Check Safari extension bundle
         run: |
+          # 앱 스토어 제출에 필요한 개인정보 매니페스트(UserDefaults 사용 이유)가 앱에 들어갔는지
+          test -f build/Build/Products/Release-iphoneos/ScreenQR.app/PrivacyInfo.xcprivacy || { echo "missing PrivacyInfo.xcprivacy"; exit 1; }
           APPEX=build/Build/Products/Release-iphoneos/ScreenQR.app/PlugIns/ScreenQRSafari.appex
           ls -R "$APPEX"
           for f in Info.plist manifest.json popup.html popup.js popup.css images/icon-128.png images/toolbar-38.png; do
@@ -40,6 +64,278 @@ jobs:
         with:
           name: ScreenQR-unsigned-ipa
           path: dist/ScreenQR-unsigned.ipa
+
+  # 시뮬레이터에서 첫 실행 튜토리얼을 끝까지 넘겨 본다. 스크린샷은 아티팩트로 올리고, 로그에도 작게 남긴다.
+  ui-test:
+    runs-on: xcode-27
+    strategy:
+      fail-fast: false
+      matrix:
+        # iphone: 세로 화면 · ipad: 13형 아이패드 세로 + 가로 (LayoutScreens가 돌려 가며 찍는다)
+        device: [iphone, ipad]
+    env:
+      DEVICE: ${{ matrix.device }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 27.1
+        run: |
+          # 아이폰 듀오의 안쪽 화면을 꽉 채우려면 iOS 27.1 SDK로 빌드해야 한다 (최소 지원은 그대로 iOS 26).
+          XCODE=/Applications/Xcode_27.1.app
+          [ -d "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app | grep -v -i -E "beta|candidate" | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Pick a simulator
+        run: |
+          cat > "$RUNNER_TEMP/pick.py" <<'PY'
+          import json, os, sys
+          want = os.environ["DEVICE"]
+          best = None
+          for runtime, items in json.load(sys.stdin)["devices"].items():
+              if "iOS-26" not in runtime and "iOS-27" not in runtime:
+                  continue
+              for device in items:
+                  name = device["name"]
+                  if want == "ipad":
+                      if not name.startswith("iPad Pro 13-inch"):
+                          continue
+                      score = (runtime, name)
+                  elif want == "duo":
+                      if name != "iPhone Duo":
+                          continue
+                      score = (runtime, name)
+                  else:
+                      if not name.startswith("iPhone") or "Duo" in name:
+                          continue
+                      score = ("Pro" in name and "Max" not in name, runtime, name)
+                  if best is None or score > best[0]:
+                      best = (score, device["udid"], name, runtime)
+          print(f"{best[1]} {best[2]} {best[3]}" if best else "")
+          PY
+          PICK=$(xcrun simctl list devices available -j | python3 "$RUNNER_TEMP/pick.py")
+          echo "simulator: $PICK"
+          test -n "$PICK"
+          echo "UDID=${PICK%% *}" >> "$GITHUB_ENV"
+      # 시뮬레이터를 먼저 다 켜 둔다. 새 실행기에서 처음 켜는 시뮬레이터는 오래 걸려서,
+      # 테스트와 함께 켜면 테스트 실행기가 제때 뜨지 못한다 (Timed out waiting for AX loaded notification).
+      - name: Boot the simulator
+        run: |
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -project ScreenQR.xcodeproj -scheme ScreenQR \
+            -destination "id=$UDID" -derivedDataPath dd CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log | tail -5
+      # 튜토리얼 흐름(ScreenQRUITests)은 통과해야 TestFlight에 올린다. 느린 실행기에서 앱을 끄다 멈추는 것 같은
+      # 일시적인 실패는 그 테스트만 한 번 더 돌려 본다 (-retry-tests-on-failure).
+      - name: UI test
+        run: |
+          set -o pipefail
+          run_tests() {
+            rm -rf UITests.xcresult
+            xcodebuild test-without-building -project ScreenQR.xcodeproj -scheme ScreenQR \
+              -destination "id=$UDID" -derivedDataPath dd -resultBundlePath UITests.xcresult \
+              -only-testing:ScreenQRUITests/ScreenQRUITests \
+              -retry-tests-on-failure -test-iterations 2 \
+              CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
+            grep -q -E "\*\* TEST (EXECUTE )?SUCCEEDED \*\*" test.log
+          }
+          if ! run_tests; then
+            # 실패한 테스트가 있으면 그대로 실패. 실패한 테스트 없이 멈췄다면 시뮬레이터 쪽 문제라
+            # (테스트 실행기가 제때 뜨지 못함, SpringBoard가 죽음 등) 시뮬레이터를 다시 켜고 한 번 더 돌린다.
+            if grep -q -E "Test Case '.*' failed" test.log; then
+              exit 1
+            fi
+            echo "::warning::시뮬레이터 문제로 테스트가 끝까지 돌지 못해, 시뮬레이터를 다시 켜고 한 번 더 돌립니다."
+            xcrun simctl shutdown "$UDID" || true
+            xcrun simctl boot "$UDID" || true
+            xcrun simctl bootstatus "$UDID" -b
+            run_tests
+          fi
+      - name: Show test errors
+        if: failure()
+        run: |
+          grep -E "error:|failed|XCTAssert" test.log | sort -u | head -80 || true
+      # 화면 배치 확인용 촬영(LayoutScreens)은 보기 위한 것이라 실패해도 TestFlight 업로드를 막지 않는다.
+      - name: Layout screens
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building -project ScreenQR.xcodeproj -scheme ScreenQR \
+            -destination "id=$UDID" -derivedDataPath dd -resultBundlePath Layout.xcresult \
+            -only-testing:ScreenQRUITests/LayoutScreens \
+            -retry-tests-on-failure -test-iterations 2 \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee layout.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
+          grep -q -E "\*\* TEST (EXECUTE )?SUCCEEDED \*\*" layout.log
+      - name: Export screenshots
+        if: always()
+        run: |
+          mkdir -p shots shots-raw
+          for bundle in UITests Layout; do
+            [ -d "$bundle.xcresult" ] || continue
+            xcrun xcresulttool export attachments --path "$bundle.xcresult" --output-path "shots-raw/$bundle" || true
+          done
+          cat > "$RUNNER_TEMP/rename.py" <<'PY'
+          import json, os, re, shutil, sys
+          raw, out = sys.argv[1], sys.argv[2]
+          manifest = os.path.join(raw, "manifest.json")
+          if os.path.exists(manifest):
+              for test in json.load(open(manifest)):
+                  for item in test.get("attachments", []):
+                      exported = item.get("exportedFileName")
+                      if not exported or not exported.lower().endswith(".png"):
+                          continue
+                      label = item.get("suggestedHumanReadableName") or exported
+                      label = re.match(r"[0-9]+-[a-z-]+", label)
+                      name = (label.group(0) if label else os.path.splitext(exported)[0]) + ".png"
+                      shutil.copy(os.path.join(raw, exported), os.path.join(out, name))
+          PY
+          for bundle in UITests Layout; do
+            python3 "$RUNNER_TEMP/rename.py" "shots-raw/$bundle" shots || true
+          done
+          # 로그로 볼 사진: 아이폰은 전부, 아이패드는 배치 확인용(7x-)만 조금 크게
+          for f in shots/*.png; do
+            [ -e "$f" ] || continue
+            if [ "$DEVICE" = "iphone" ]; then
+              sips -s format jpeg -s formatOptions 50 --resampleWidth 420 "$f" --out "${f%.png}.jpg" >/dev/null
+            else
+              case "$(basename "$f")" in
+                7*) sips -s format jpeg -s formatOptions 50 --resampleWidth 640 "$f" --out "${f%.png}.jpg" >/dev/null ;;
+              esac
+            fi
+          done
+          ls -la shots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ScreenQR-screenshots-${{ matrix.device }}
+          path: shots/*.png
+          if-no-files-found: warn
+      - name: Print screenshots (base64, for review)
+        if: always()
+        run: |
+          for f in shots/*.jpg; do
+            [ -e "$f" ] || continue
+            echo "=====BEGIN $(basename "$f")====="
+            base64 -b 4000 -i "$f"
+            echo "=====END $(basename "$f")====="
+          done
+
+  # 아이폰 듀오: 펼친 안쪽 화면과 접은 바깥 화면에서 주요 화면을 찍는다 (LayoutScreens).
+  # Xcode에는 접고 펴는 명령이 없어서, Device Hub의 경첩 슬라이더와 같은 신호를 보내는 공개 도구
+  # duo-hinge(MIT, github.com/tosbaha/duo-fold-control)를 고정된 버전 · 해시로 받아 쓴다.
+  # 비공개 시뮬레이터 기능에 기대는 확인용 작업이라 TestFlight 업로드를 막지 않는다.
+  duo:
+    runs-on: xcode-27
+    env:
+      DEVICE: duo
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 27.1
+        run: |
+          XCODE=/Applications/Xcode_27.1.app
+          [ -d "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app | grep -v -i -E "beta|candidate" | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Boot the iPhone Duo simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          found = [(r, d["udid"]) for r, items in json.load(sys.stdin)["devices"].items() for d in items if d["name"] == "iPhone Duo"]
+          print(max(found)[1] if found else "")')
+          echo "simulator: $UDID"
+          test -n "$UDID"
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -project ScreenQR.xcodeproj -scheme ScreenQR \
+            -destination "id=$UDID" -derivedDataPath dd CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log | tail -5
+      - name: Fold tool (duo-hinge)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/duo-hinge.m" \
+            "https://raw.githubusercontent.com/tosbaha/duo-fold-control/6207cc897648959c3c2213ac3a2dcf38f6f9eb41/tools/duo-hinge.m"
+          echo "771a6ef85afaa95ed2868b35c2966872e958e2675042edf940e396a411ffdb0c  $RUNNER_TEMP/duo-hinge.m" | shasum -a 256 -c -
+          clang -fobjc-arc -framework Foundation -o "$RUNNER_TEMP/duo-hinge" "$RUNNER_TEMP/duo-hinge.m"
+      - name: Inner screen (unfolded)
+        continue-on-error: true
+        run: |
+          DEVELOPER_DIR="$(xcode-select -p)" "$RUNNER_TEMP/duo-hinge" -d "$UDID" flat
+          sleep 3
+          set -o pipefail
+          TEST_RUNNER_DUO_STATE=flat xcodebuild test-without-building -project ScreenQR.xcodeproj -scheme ScreenQR \
+            -destination "id=$UDID" -derivedDataPath dd -resultBundlePath DuoInner.xcresult \
+            -only-testing:ScreenQRUITests/LayoutScreens -retry-tests-on-failure -test-iterations 2 \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee inner.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
+          grep -q -E "\*\* TEST (EXECUTE )?SUCCEEDED \*\*" inner.log
+      - name: Cover screen (folded)
+        continue-on-error: true
+        run: |
+          DEVELOPER_DIR="$(xcode-select -p)" "$RUNNER_TEMP/duo-hinge" -d "$UDID" closed
+          sleep 3
+          set -o pipefail
+          TEST_RUNNER_DUO_STATE=closed xcodebuild test-without-building -project ScreenQR.xcodeproj -scheme ScreenQR \
+            -destination "id=$UDID" -derivedDataPath dd -resultBundlePath DuoCover.xcresult \
+            -only-testing:ScreenQRUITests/LayoutScreens -retry-tests-on-failure -test-iterations 2 \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee cover.log | grep -E "Test (Case|Suite)|error:|\*\* TEST" || true
+          grep -q -E "\*\* TEST (EXECUTE )?SUCCEEDED \*\*" cover.log
+      - name: Show test errors
+        if: always()
+        run: |
+          grep -h -E "error:|failed|XCTAssert" inner.log cover.log 2>/dev/null | sort -u | head -60 || true
+      - name: Export screenshots
+        if: always()
+        run: |
+          mkdir -p shots
+          for bundle in DuoInner DuoCover; do
+            [ -d "$bundle.xcresult" ] || continue
+            xcrun xcresulttool export attachments --path "$bundle.xcresult" --output-path "raw-$bundle" || true
+            python3 - "raw-$bundle" shots <<'PY'
+          import json, os, re, shutil, sys
+          raw, out = sys.argv[1], sys.argv[2]
+          manifest = os.path.join(raw, "manifest.json")
+          if os.path.exists(manifest):
+              for test in json.load(open(manifest)):
+                  for item in test.get("attachments", []):
+                      exported = item.get("exportedFileName")
+                      if not exported or not exported.lower().endswith(".png"):
+                          continue
+                      label = re.match(r"[0-9]+-[a-z-]+", item.get("suggestedHumanReadableName") or exported)
+                      name = (label.group(0) if label else os.path.splitext(exported)[0]) + ".png"
+                      shutil.copy(os.path.join(raw, exported), os.path.join(out, name))
+          PY
+          done
+          for f in shots/*.png; do
+            [ -e "$f" ] || continue
+            sips -s format jpeg -s formatOptions 50 --resampleWidth 560 "$f" --out "${f%.png}.jpg" >/dev/null
+          done
+          ls -la shots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ScreenQR-screenshots-duo
+          path: shots/*.png
+          if-no-files-found: warn
+      - name: Print screenshots (base64, for review)
+        if: always()
+        run: |
+          for f in shots/*.jpg; do
+            [ -e "$f" ] || continue
+            echo "=====BEGIN $(basename "$f")====="
+            base64 -b 4000 -i "$f"
+            echo "=====END $(basename "$f")====="
+          done
 
   browser-extension:
     runs-on: ubuntu-latest
@@ -70,20 +366,27 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Publish "latest" release
+      # 릴리스를 지웠다가 다시 만들면, 빌드한 커밋이 브랜치의 최신 커밋이 아닐 때(다시 실행했거나 그사이 새 push가 있을 때)
+      # 새로 만드는 요청이 HTTP 403으로 막혀 릴리스가 사라진다. 그래서 있으면 파일만 바꿔 올리고, 없을 때만 새로 만든다.
+      - name: Publish "screenqr-latest" release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest dist/* --target "$GITHUB_SHA" --prerelease \
-            --title "화면 QR (최신 빌드)" \
-            --notes "ScreenQR-unsigned.ipa: Sideloadly 등으로 아이폰에 설치 · ScreenQR-browser-extension.zip: Chrome/Edge/Whale/Brave/Firefox 확장"
+          TITLE="Screen QR Scanner (최신 빌드)"
+          NOTES="ScreenQR-unsigned.ipa: Sideloadly 등으로 아이폰에 설치 · ScreenQR-browser-extension.zip: Chrome/Edge/Whale/Brave/Firefox 확장 (커밋 ${GITHUB_SHA::7})"
+          if gh release view screenqr-latest >/dev/null 2>&1; then
+            gh release upload screenqr-latest dist/* --clobber
+            gh release edit screenqr-latest --title "$TITLE" --notes "$NOTES"
+          else
+            gh release create screenqr-latest dist/* --target "$GITHUB_SHA" --prerelease --title "$TITLE" --notes "$NOTES"
+          fi
 
+  # 시뮬레이터 UI 테스트(튜토리얼)까지 통과한 빌드만 TestFlight에 올린다.
   testflight:
     if: github.event_name != 'pull_request'
-    needs: ios
-    runs-on: macos-15
+    needs: [ios, ui-test]
+    runs-on: xcode-27
     env:
       TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -101,10 +404,13 @@ jobs:
           fi
       - uses: actions/checkout@v4
         if: steps.check.outputs.ready == 'true'
-      - name: Select Xcode 26
+      - name: Select Xcode 27.1
         if: steps.check.outputs.ready == 'true'
         run: |
-          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          # 정식 출시된 Xcode로 올린다 (베타 · RC는 쓰지 않는다).
+          XCODE=/Applications/Xcode_27.1.app
+          [ -d "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app | grep -v -i -E "beta|candidate" | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
           xcodebuild -version
       - name: Generate project
         if: steps.check.outputs.ready == 'true'
@@ -139,8 +445,14 @@ jobs:
           </dict>
           </plist>
           PLIST
+          set -o pipefail
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/ScreenQR.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" \
-            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/export.log" || {
+            if grep -q "Error Downloading App Information" "$RUNNER_TEMP/export.log"; then
+              echo "::error::App Store Connect에 번들 ID $APP_BUNDLE_ID 앱이 없어요. README의 TestFlight 준비 1~2단계(App ID 등록, 앱 만들기)를 먼저 해 주세요."
+            fi
+            exit 1
+          }

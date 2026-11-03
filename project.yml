@@ -1,6 +1,8 @@
 name: ScreenQR
 options:
   bundleIdPrefix: com.example
+  # 앱 글이 모두 한국어라 개발 언어도 한국어로 둔다. (영어로 두면 붙여넣기 · 취소 같은 시스템 버튼이 영어로 나온다)
+  developmentLanguage: ko
   deploymentTarget:
     iOS: "26.0"
 settings:
@@ -11,22 +13,36 @@ settings:
     # 번들 ID. CI에서는 저장소 변수 APP_BUNDLE_ID로 바꿀 수 있고, 확장 프로그램은 뒤에 .safari가 붙는다.
     APP_BUNDLE_ID: io.github.walkin07.screenqr
     CODE_SIGN_STYLE: Automatic
-    TARGETED_DEVICE_FAMILY: "1"
+    # 아이폰(아이폰 듀오 포함)과 아이패드
+    TARGETED_DEVICE_FAMILY: "1,2"
 targets:
   ScreenQR:
     type: application
     platform: iOS
     sources: [ScreenQR]
-    scheme: {}
+    scheme:
+      testTargets:
+        - ScreenQRUITests
     dependencies:
       - target: ScreenQRSafari
     info:
       path: ScreenQR/Info.plist
       properties:
-        CFBundleDisplayName: 화면 QR
+        CFBundleDisplayName: Screen QR Scanner
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: ko
+        CFBundleLocalizations: [ko]
+        NSPhotoLibraryAddUsageDescription: 만든 QR 코드를 사진 앱에 저장해요.
         UILaunchScreen: {}
+        # 아이폰은 세로로만 (펼친 아이폰 듀오의 안쪽 화면은 방향과 상관없이 화면 크기에 맞춰 배치된다)
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        UIRequiresFullScreen: true
+        # 아이패드는 모든 방향 + Split View · Stage Manager (UIRequiresFullScreen을 쓰지 않는다)
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UIUserInterfaceStyle: Light
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
@@ -53,10 +69,25 @@ targets:
     info:
       path: SafariExtension/Info.plist
       properties:
-        CFBundleDisplayName: 화면 QR
+        CFBundleDisplayName: Screen QR Scanner
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.Safari.web-extension
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).safari
+
+  # 시뮬레이터에서 첫 실행 튜토리얼을 넘겨 보는 UI 테스트 (CI의 ui-test 작업). 배포용 IPA에는 들어가지 않는다.
+  ScreenQRUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [ScreenQRUITests]
+    dependencies:
+      - target: ScreenQR
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: ScreenQR

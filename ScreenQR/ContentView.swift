@@ -6,73 +6,84 @@ struct ScannedText: Identifiable {
     let text: String
 }
 
-/// 단축어를 실행할 방법
-enum Trigger: String, CaseIterable, Identifiable {
-    case backTap, actionButton, controlCenter, safari
+/// 위쪽 전환: 화면 속 QR 읽기 / 링크로 QR 만들기
+enum AppMode: String, CaseIterable, Identifiable {
+    case scan, make
 
     var id: Self { self }
 
     var title: String {
         switch self {
-        case .backTap: "뒷면 탭"
-        case .actionButton: "동작 버튼"
-        case .controlCenter: "제어 센터"
-        case .safari: "Safari"
+        case .scan: "QR 읽기"
+        case .make: "QR 만들기"
         }
     }
 
     var symbol: String {
         switch self {
-        case .backTap: "hand.tap"
-        case .actionButton: "button.horizontal.top.press"
-        case .controlCenter: "switch.2"
-        case .safari: "safari"
-        }
-    }
-
-    var steps: [String] {
-        switch self {
-        case .backTap:
-            ["설정 → 손쉬운 사용 → 터치 → 뒷면 탭", "이중 탭 → 화면 QR 선택", "이제 뒷면을 두 번 톡톡"]
-        case .actionButton:
-            ["설정 → 동작 버튼", "단축어 → 화면 QR 선택", "iPhone 15 Pro 이상에서 쓸 수 있어요"]
-        case .controlCenter:
-            ["제어 센터를 열고 빈 곳을 길게 누르기", "컨트롤 추가 → 단축어 → 화면 QR 선택", "제어 센터에서 한 번 누르기"]
-        case .safari:
-            ["설정 → 앱 → Safari → 확장 프로그램", "화면 QR 켜기", "주소창의 메뉴 → 화면 QR (단축어 없이 동작)"]
+        case .scan: "qrcode.viewfinder"
+        case .make: "qrcode"
         }
     }
 }
 
 struct ContentView: View {
     @Environment(\.openURL) private var openURL
-    @State private var trigger: Trigger = .backTap
+    @AppStorage(TutorialKeys.done) private var tutorialDone = false
+    @AppStorage(TutorialKeys.page) private var tutorialPage = 0
+    @AppStorage(TutorialKeys.completed) private var tutorialCompleted = false
+    /// 처음 설치했으면 튜토리얼부터 보여 준다 (첫 화면부터 바로 보이도록 시작 값으로 정한다).
+    @State private var showTutorial = !UserDefaults.standard.bool(forKey: TutorialKeys.done)
+    /// 튜토리얼을 시작할 페이지. nil이면 보던 페이지부터 (처음 설치했으면 ‘튜토리얼 보기 / 건너뛰기’ 화면).
+    /// 기본 화면의 버튼으로 열면 이미 보기로 고른 것이라 바로 1단계부터 연다.
+    @State private var tutorialStart: TutorialPage?
+    /// 처음 설치해서 열렸는지, 기본 화면 버튼으로 다시 열었는지 (첫 화면의 건너뛰기 / X가 달라진다)
+    @State private var tutorialEntry: TutorialEntry = .firstRun
+    @State private var tutorialTestPassed = false
+    @State private var mode: AppMode = AppMode(rawValue: uiTestDefault("uitest.mode") ?? "") ?? .scan
     @State private var scanned: ScannedText?
-    @State private var tapCount = 0
+    /// 같은 QR 내용이 앱 안 전달과 URL로 두 번 올 수 있어서, 잠깐 사이에 같은 내용은 한 번만 처리한다.
+    @State private var lastReceived: (text: String, at: Date)?
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 32) {
-                header
-                shortcutCard
-                triggerCard
-                Text("스크린샷은 저장되지 않고, QR은 기기 안에서만 읽어요.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+        ZStack {
+            home
+                .scaleEffect(showTutorial ? 0.94 : 1)
+                .opacity(showTutorial ? 0 : 1)
+                .allowsHitTesting(!showTutorial)
+                .accessibilityHidden(showTutorial)
+            if showTutorial {
+                TutorialView(
+                    start: tutorialStart,
+                    entry: tutorialEntry,
+                    testPassed: tutorialTestPassed,
+                    onClose: closeTutorial
+                )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom),
+                        removal: .opacity.combined(with: .scale(scale: 1.04))
+                    ))
+                    .zIndex(1)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 40)
         }
-        .scrollBounceBehavior(.basedOnSize)
         .background(Color.white.ignoresSafeArea())
         .preferredColorScheme(.light)
-        .sensoryFeedback(.selection, trigger: trigger)
-        .sensoryFeedback(.impact(weight: .light), trigger: tapCount)
+        .sensoryFeedback(.selection, trigger: mode)
         .sensoryFeedback(.success, trigger: scanned?.id)
+        // 튜토리얼을 열 때는 가볍게, 닫고 기본 화면으로 갈 때는 조금 더 묵직하게
+        .sensoryFeedback(trigger: showTutorial) { _, shown -> SensoryFeedback? in
+            shown ? SensoryFeedback.impact(weight: .light) : SensoryFeedback.impact(weight: .medium)
+        }
+        // 단축어 동작이 읽은 ‘링크가 아닌 QR’ (앱 안에서 바로 전해진다)
+        .onReceive(QRInbox.shared.$pending) { item in
+            guard let item else { return }
+            receive(item.text)
+            // 받는 중에 바로 지우지 않고 다음 차례에 지운다 (같은 값을 내보내는 중에 바꾸지 않게).
+            Task { @MainActor in QRInbox.shared.clear(item.id) }
+        }
         .onOpenURL { url in
             if let text = QRPayload.text(from: url) {
-                scanned = ScannedText(text: text)
+                receive(text)
             }
         }
         .sheet(item: $scanned) { item in
@@ -80,129 +91,139 @@ struct ContentView: View {
         }
     }
 
-    private var header: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "qrcode.viewfinder")
-                .font(.system(size: 40, weight: .medium))
-                .frame(width: 88, height: 88)
-                .glassEffect(.regular.interactive(), in: .circle)
-            VStack(spacing: 6) {
-                Text("화면 QR")
-                    .font(.largeTitle.bold())
-                Text("버튼 한 번으로 화면 속 QR을 열어요")
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var shortcutCard: some View {
-        Card(number: 1, title: "단축어 만들기") {
-            VStack(alignment: .leading, spacing: 10) {
-                ActionRow(symbol: "camera.viewfinder", text: "스크린샷 찍기")
-                ActionRow(symbol: "qrcode", text: "이미지 속 QR 열기")
-            }
-            Button {
-                tapCount += 1
-                if let url = URL(string: "shortcuts://create-shortcut") { openURL(url) }
-            } label: {
-                Text("단축어 앱 열기")
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.glassProminent)
-            .tint(.black)
-            .controlSize(.large)
-        }
-    }
-
-    private var triggerCard: some View {
-        Card(number: 2, title: "실행 방법 고르기") {
-            GlassEffectContainer(spacing: 8) {
-                HStack(spacing: 8) {
-                    ForEach(Trigger.allCases) { item in
-                        TriggerChip(trigger: item, isSelected: item == trigger) {
-                            withAnimation(.snappy) { trigger = item }
+    private var home: some View {
+        GeometryReader { proxy in
+            // 키보드가 올라와도 배치가 바뀌지 않게, 안전 영역(키보드 포함)을 더한 창 전체 크기로 판단한다.
+            let insets = proxy.safeAreaInsets
+            let width = proxy.size.width + insets.leading + insets.trailing
+            let height = proxy.size.height + insets.top + insets.bottom
+            // 아이패드 가로 · 펼친 아이폰 듀오처럼 가로로 넓은 화면
+            let wide = width >= 700 && width > height * 1.1
+            // 그중 세로가 짧은 화면(펼친 아이폰 듀오 등)은 머리글을 한 줄로 줄인다.
+            let short = wide && height < 760
+            ScrollView {
+                VStack(spacing: short ? 24 : 32) {
+                    header(inline: short)
+                    modePicker
+                        .frame(maxWidth: 560)
+                    switch mode {
+                    case .scan:
+                        VStack(spacing: 16) {
+                            PhotoScanCard(onOpen: openPayload)
+                            tutorialButton
                         }
+                        .frame(maxWidth: 560)
+                    case .make:
+                        // 넓은 화면에서는 입력과 QR 코드를 나란히 둔다.
+                        QRMakerView(sideBySide: wide)
+                            .frame(maxWidth: wide ? 880 : 560)
                     }
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, short ? 24 : 40)
+                .frame(maxWidth: .infinity)
             }
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(Array(trigger.steps.enumerated()), id: \.offset) { index, step in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text("\(index + 1)")
-                            .font(.footnote.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                        Text(step)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .background(Color.white.ignoresSafeArea())
+    }
+
+    /// 단축어로 읽은 링크가 아닌 QR: 튜토리얼의 시험용 QR이면 성공 표시, 아니면 내용을 보여 준다.
+    private func receive(_ text: String) {
+        if let last = lastReceived, last.text == text, Date().timeIntervalSince(last.at) < 3 { return }
+        lastReceived = (text, Date())
+        if showTutorial && text == TutorialView.testPayload {
+            tutorialTestPassed = true
+        } else {
+            scanned = ScannedText(text: text)
+        }
+    }
+
+    private func openTutorial() {
+        tutorialStart = .open
+        tutorialEntry = .revisit(completed: tutorialCompleted)
+        tutorialTestPassed = false
+        withAnimation(.spring(duration: 0.55, bounce: 0.1)) { showTutorial = true }
+    }
+
+    /// - Parameter completed: 마지막 페이지에서 ‘완료’를 눌렀으면 true (건너뛰기 · 나중에 · X는 false)
+    private func closeTutorial(completed: Bool) {
+        tutorialDone = true
+        if completed { tutorialCompleted = true }
+        tutorialPage = 0
+        withAnimation(.smooth(duration: 0.5)) { showTutorial = false }
+    }
+
+    /// 찾은 QR 내용을 연다: 링크는 바로 열고, 글이나 Wi-Fi 정보는 내용을 보여 준다.
+    private func openPayload(_ payload: String) {
+        let url = QRPayload.destination(for: payload)
+        if let text = QRPayload.text(from: url) {
+            scanned = ScannedText(text: text)
+        } else {
+            openURL(url)
+        }
+    }
+
+    /// - Parameter inline: 세로가 짧은 넓은 화면에서는 아이콘과 이름을 한 줄에 둔다.
+    private func header(inline: Bool) -> some View {
+        let stack = inline ? AnyLayout(HStackLayout(spacing: 16)) : AnyLayout(VStackLayout(spacing: 16))
+        return stack {
+            Image(systemName: "qrcode.viewfinder")
+                .font(.system(size: inline ? 28 : 40, weight: .medium))
+                .frame(width: inline ? 60 : 88, height: inline ? 60 : 88)
+                .glassEffect(.regular.interactive(), in: .circle)
+            Text("Screen QR Scanner")
+                .font(.largeTitle.bold())
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+    }
+
+    private var modePicker: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                ForEach(AppMode.allCases) { item in
+                    Button {
+                        withAnimation(.snappy) { mode = item }
+                    } label: {
+                        Label(item.title, systemImage: item.symbol)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(item == mode ? Color.white : Color.primary)
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                            // 글자뿐 아니라 버튼(캡슐) 전체가 눌리게 (아이패드처럼 버튼이 넓으면 빈 곳이 많다)
+                            .contentShape(.capsule)
                     }
+                    .buttonStyle(.plain)
+                    .glassEffect(
+                        item == mode ? .regular.tint(.black).interactive() : .regular.interactive(),
+                        in: .capsule
+                    )
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .id(trigger)
-            .transition(.opacity)
         }
     }
-}
 
-private struct Card<Content: View>: View {
-    let number: Int
-    let title: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 10) {
-                Text("\(number)")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 26, height: 26)
-                    .background(.black, in: .circle)
-                Text(title)
-                    .font(.title3.weight(.semibold))
+    /// 튜토리얼을 다시 보는 버튼
+    private var tutorialButton: some View {
+        Button(action: openTutorial) {
+            HStack(spacing: 14) {
+                ShortcutsGlyph(size: 44)
+                Text("단축어 만들기 튜토리얼")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
-            content
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 28))
-    }
-}
-
-private struct ActionRow: View {
-    let symbol: String
-    let text: String
-
-    var body: some View {
-        Label(text, systemImage: symbol)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.black.opacity(0.04), in: .rect(cornerRadius: 14))
-    }
-}
-
-private struct TriggerChip: View {
-    let trigger: Trigger
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: trigger.symbol)
-                    .font(.system(size: 18, weight: .medium))
-                Text(trigger.title)
-                    .font(.caption.weight(.medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
-            .frame(maxWidth: .infinity, minHeight: 60)
+            .contentShape(.rect(cornerRadius: 24))
         }
         .buttonStyle(.plain)
-        .glassEffect(
-            isSelected ? .regular.tint(.black).interactive() : .regular.interactive(),
-            in: .rect(cornerRadius: 18)
-        )
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24))
+        .accessibilityIdentifier("home.tutorial")
     }
 }
 
@@ -211,6 +232,7 @@ struct ScannedTextView: View {
     let text: String
     @Environment(\.dismiss) private var dismiss
     @State private var copied = false
+    @State private var closeTick = 0
 
     var body: some View {
         VStack(spacing: 20) {
@@ -225,8 +247,11 @@ struct ScannedTextView: View {
             }
             .glassEffect(.regular, in: .rect(cornerRadius: 24))
             HStack(spacing: 12) {
-                Button("닫기") { dismiss() }
-                    .buttonStyle(.glass)
+                Button("닫기") {
+                    closeTick += 1
+                    dismiss()
+                }
+                .buttonStyle(.glass)
                 Button(copied ? "복사됨" : "복사") {
                     UIPasteboard.general.string = text
                     copied = true
@@ -240,5 +265,6 @@ struct ScannedTextView: View {
         .background(Color.white.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .sensoryFeedback(.success, trigger: copied)
+        .sensoryFeedback(.impact(weight: .light), trigger: closeTick)
     }
 }
